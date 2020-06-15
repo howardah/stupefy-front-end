@@ -1,0 +1,82 @@
+html {
+  font-family: "Roboto", sans-serif;
+  background: cadetblue;
+  color: white;
+}
+
+#main-content {
+  /* margin-top: 20px; */
+  max-width: 600px;
+  width: 100%;
+  margin: auto;
+  padding: 20px;
+  text-align: center;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+h2,
+h3 {
+  color: #2e4d4e;
+  font-size: 2.5em;
+  margin-bottom: 20px;
+  background-color: #191b1b;
+  /* color: transparent; */
+  text-shadow: 0px 1px 2px rgba(255, 255, 255, 0.2);
+  -webkit-background-clip: text;
+  -moz-background-clip: text;
+  background-clip: text;
+}
+
+h3 {
+  margin-top: -20px;
+  font-size: 1.1em;
+}
+
+#the-word {
+  background-color: #f5fffa2e;
+  font-weight: 700;
+  /* width: 100%; */
+  font-size: 2em;
+  padding: 20px;
+  border-radius: 6px;
+  box-shadow: inset 1px 1px 0px #2e4d4e6e, inset -1px -1px 0px #90cacc;
+}
+
+#word-gen {
+  display: inline-block;
+  padding: 10px;
+  margin-top: 25px;
+  text-transform: uppercase;
+  text-decoration: none;
+  background: #fff;
+  color: #7ab0b0;
+  border-radius: 4px;
+  /* cursor: default; */
+  box-shadow: 1px 1px 3px #2e4d4ea8;
+  /* transition: all .1s; */
+}
+
+#word-gen:hover {
+  color: #70a0a0;
+  background: #f4f5f5;
+  /* color: #679696; */
+  /* background: #ffffffe0; */
+  box-shadow: 0px 0px 0px #2e4d4ea8;
+}
+
+#today-link {
+  display: block;
+  margin-top: 18px;
+  color: #2e4d4e;
+  font-size: 0.8em;
+  text-decoration: none;
+}
+
+@media screen and (max-width: 600px) {
+  #main-content {
+    max-width: calc(100% - 40px);
+  }
+}

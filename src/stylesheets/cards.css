@@ -1,0 +1,45 @@
+.empty {
+  background-color: #5e9496;
+  border-color: #4c6f71;
+  box-shadow: inset 0px 0px 3px #00000030;
+}
+
+.card:after {
+  position: absolute;
+  bottom: 15px;
+  left: 25px;
+  font-style: italic;
+  font-weight: 900;
+}
+
+.card.R:after {
+  content: "R";
+  position: absolute;
+  /* bottom: 15px;
+  /* left: 25px; */
+  color: #2e2e77;
+  /* font-style: italic; */
+  /* font-weight: 900; */
+}
+
+.card.H:after {
+  content: "H";
+  position: absolute;
+  color: #d8c24d;
+}
+
+.card.S:after {
+  content: "S";
+  position: absolute;
+  color: #3f843f;
+}
+
+.card.G:after {
+  content: "G";
+  position: absolute;
+  color: #ad3f3f;
+}
+
+.other-player .card:after {
+  content: "";
+}

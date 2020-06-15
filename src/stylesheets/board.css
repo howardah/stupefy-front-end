@@ -1,0 +1,124 @@
+.sidebar {
+  position: fixed;
+  bottom: 0;
+  z-index: 30;
+  right: 0;
+  width: 170px;
+  background: #6a6f79;
+  border-left: solid 1px #c5c5c5;
+  border-top: solid 1px #c5c5c5;
+  height: 300px;
+  color: white;
+}
+
+.sidebar-inner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.sidebar-inner .players {
+  margin-bottom: 10px;
+}
+
+.hand {
+  margin: 0;
+}
+
+.card {
+  padding-bottom: min(54.47%, 282.26px);
+  width: min(40%, 206.8px);
+  display: inline-block;
+  background-position: center;
+  border-radius: 4%;
+  margin: 5px;
+  background-size: auto 106%;
+  position: relative;
+}
+
+.piles .draw {
+  background-image: url("/images/stupefy/back2.jpg") !important;
+}
+
+.other-player .hand .card {
+  background-image: url("/images/stupefy/back2.jpg") !important;
+  padding-bottom: min(54.47%, 141.13px);
+  width: min(40%, 103.4px);
+  border-radius: 4%;
+}
+
+.this-player .hand {
+  position: fixed;
+  bottom: 0;
+  z-index: 20;
+  width: calc(100% - 170px);
+  left: 0;
+  background: #f3f3f3;
+  height: 300px;
+  padding: 20px;
+  overflow: scroll;
+  white-space: nowrap;
+  border-top: solid 1px #c5c5c5;
+}
+
+.this-player .hand .card {
+  /* padding-bottom: min(54.47%, 282.26px); */
+  padding: 0;
+  height: calc(100% - 16px);
+  width: min(40%, 176.8px);
+}
+
+.health.card {
+  background-image: url("/images/stupefy/blank.jpg");
+}
+
+.health.wands {
+  height: 60px;
+  position: absolute;
+  left: calc(50% - 30px);
+  width: 60px;
+}
+
+.wands_1 {
+  background-image: url(/images/stupefy/wands_1.png);
+  bottom: 40px;
+}
+
+.wands_2 {
+  background-image: url(/images/stupefy/wands_2.png);
+  bottom: 55px;
+}
+
+.wands_3 {
+  background-image: url(/images/stupefy/wands_3.png);
+  bottom: 70px;
+}
+
+.wands_4 {
+  background-image: url(/images/stupefy/wands_4.png);
+  bottom: 85px;
+}
+
+.wands_5 {
+  background-image: url(/images/stupefy/wands_5.png);
+  bottom: 100px;
+}
+
+.wands_6 {
+  background-image: url(/images/stupefy/wands_6.png);
+  bottom: 115px;
+}
+
+.wands_7 {
+  background-image: url(/images/stupefy/wands_7.png);
+  bottom: 130px;
+}
+
+@media screen and (max-width: 600px) {
+  .card {
+    padding-bottom: 54.47%;
+    width: 40%;
+    border-radius: 4%;
+  }
+}

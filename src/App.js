@@ -1,26 +1,35 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import React, { Component } from "react";
+import logo from "./logo.svg";
+import "./App.css";
+import * as setup from "./javascripts/card-setup";
+import { Deck } from "./javascripts/deck";
+import Board from "./components/board";
+import SideBar from "./components/sidebar";
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
+// const socket = io();
+// const { room } = Qs.parse(location.search, {
+//   ignoreQueryPrefix: true,
+// });
+
+// const thisPlayer = players[0];
+
+// initialDeck.shuffle();
+// characterDeck.shuffle();
+
+class App extends Component {
+  state = {
+    deck: new Deck(setup.initialDeck.cards, setup.initialDeck.discards),
+  };
+  render() {
+    return (
+      <div className="container">
+        <div className="row">
+          <Board characters={setup.players} deck={this.state.deck} />
+          <SideBar players={setup.players} />
+        </div>
+      </div>
+    );
+  }
 }
 
 export default App;
