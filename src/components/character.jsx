@@ -8,13 +8,23 @@ class Character extends Card {
     return (
       <div className="character">
         <div
-          className="card"
+          className={
+            this.props.character.fileName +
+            " card " +
+            this.props.extraClass +
+            (this.isEmpty(this.props.character.house)
+              ? ""
+              : this.props.character.house + " ")
+          }
           style={{
             backgroundImage:
               "url('/images/stupefy/characters/" +
               this.props.character.fileName +
               ".jpg')",
           }}
+          onClick={() =>
+            this.props.playCard(this.props.player, this.props.character)
+          }
         ></div>
         <div className="health card">
           {Array.from(Array(this.props.character.health).keys())

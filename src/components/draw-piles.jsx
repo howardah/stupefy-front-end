@@ -8,7 +8,7 @@ class Decks extends Component {
         <CardDeck
           innerRef={this.props.innerRef}
           drawCard={this.props.drawCard}
-          deck={this.props.theDeck}
+          deck={this.props.deck}
         />
       </React.Fragment>
     );

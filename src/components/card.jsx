@@ -5,10 +5,14 @@ class Card extends Component {
     return checker === "";
   };
 
+  playCard = () => {
+    this.props.playCard(this.props.player, this.props.card);
+  };
+
   render() {
     return (
       <div
-        onClick={() => this.props.playCard(this.props.player, this.props.card)}
+        onClick={this.playCard}
         cardname={this.props.card.fileName}
         className={
           this.props.card.fileName +

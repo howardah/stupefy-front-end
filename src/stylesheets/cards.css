@@ -1,3 +1,9 @@
+.card {
+  background-color: #5e9496;
+  border-color: #4c6f71;
+  box-shadow: inset 0px 0px 3px #00000030;
+}
+
 .empty {
   background-color: #5e9496;
   border-color: #4c6f71;
@@ -40,6 +46,18 @@
   color: #ad3f3f;
 }
 
-.other-player .card:after {
+.other-player .hand .card:after,
+.card.draw:after {
   content: "";
+}
+
+.clickable:hover {
+  cursor: pointer;
+  box-shadow: 0px 0px 11px 4px #ffc107;
+}
+
+.card.selected {
+  /* cursor: inherit; */
+  box-shadow: 0px 0px 11px 4px #0761ff;
+  z-index: 10;
 }
