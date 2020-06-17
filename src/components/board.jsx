@@ -2,13 +2,13 @@ import React, { Component, useRef } from "react";
 import Player from "./player";
 import CardDeck from "./card-deck";
 import { Deck } from "../javascripts/deck";
-import { CardRules, resolveAttack } from "./card-rules";
+import { CardRules, resolveEvent } from "./card-rules";
 import SideBar from "./sidebar";
 import Alert from "./alert";
 import Action from "./action";
 import Table from "./table";
 import socketIOClient from "socket.io-client";
-import { theDeck } from "../javascripts/card-setup";
+import { deck } from "../javascripts/card-setup";
 const ENDPOINT = "http://127.0.0.1:4001";
 const socket = socketIOClient(ENDPOINT);
 
@@ -19,6 +19,7 @@ const emptyReaction = {
   effects: "",
   location: "",
 };
+
 const thisPlayeri = (oplayers, id) => {
   return oplayers.findIndex((player) => {
     return player.id === Number(id);
@@ -39,21 +40,29 @@ const initialPlayers = (oplayers, id, turn) => {
 
 class Board extends Component {
   state = {
-    players: initialPlayers(this.props.players, this.props.query.id, 0),
-    theDeck: this.props.deck,
+    players: initialPlayers(
+      this.props.players,
+      this.props.query.id,
+      this.props.turn
+    ),
+    deck: this.props.deck,
     reaction: emptyReaction,
     actions: {
       message: "",
       options: [],
     },
+    events: this.props.events,
     alerts: [
       // "Welcome " +
-      //   this.props.players[thisPlayeri(this.props.players, this.props.query.id)]
+      //   this.props.players[thisPlayeri(this.props.players, this.state.player_id)]
       //     .name +
       //   "!",
     ],
     table: [],
-    turn: 0,
+    turn: this.props.turn,
+    freeze: false,
+    player_id: this.props.query.id,
+    player_room: this.props.query.room,
   };
 
   nextTurn = () => {
@@ -62,7 +71,7 @@ class Board extends Component {
     if (turn >= this.state.players.length) turn = 0;
 
     // this.setState({ turn });
-    this.emitEvent({ state: { turn } });
+    this.emitEvent({ turn });
   };
 
   componentDidUpdate(pprops, pstate) {
@@ -72,23 +81,26 @@ class Board extends Component {
   handleActionResponse = (action) => {
     if (action === "" || this[action]()) {
       this.setState({ actions: { message: "", options: [] } });
+      const events = [...this.state.events];
+      events.shift();
+      this.emitEvent(events);
     }
   };
 
   takeHit = () => {
     const players = [...this.state.players],
-      thisIndex = this.findMe(this.props.query.id);
+      thisIndex = this.findMe(this.state.player_id);
 
     players[thisIndex].character.health--;
 
     // this.setState(players);
-    this.emitEvent({ state: { players: players } });
+    this.emitEvent({ players: players });
     return true;
   };
 
   playProtego = () => {
     if (
-      this.state.players[this.findMe(this.props.query.id)].hand.findIndex(
+      this.state.players[this.findMe(this.state.player_id)].hand.findIndex(
         (card) => {
           return card.name === "protego";
         }
@@ -102,11 +114,24 @@ class Board extends Component {
   };
 
   componentDidMount() {
+    // this.state.player_id = this.props.query.id;
+    // this.state.player_room = this.props.query.room;
+
     socket.on("FromAPI", (data) => {
-      this.catchSocket(data);
+      if (data.room === this.state.player_room) {
+        this.catchSocket(data);
+      }
     });
     this.props.onRef(this);
     console.log("only this once");
+
+    if (this.state.events.length > 0) {
+      if (this.state.events[0].target === this.state.player_id) {
+        if (this.state.events[[0]].popup) {
+          this.setState({ actions: this.state.events[0].popup });
+        }
+      }
+    }
   }
   componentWillUnmount() {
     this.props.onRef(undefined);
@@ -154,12 +179,10 @@ class Board extends Component {
     );
 
     this.emitEvent({
-      attack: cardReturn.attack,
-      state: {
-        players: dObj.players,
-        theDeck: dObj.theDeck,
-        reaction: emptyReaction,
-      },
+      players: dObj.players,
+      deck: dObj.deck,
+      reaction: emptyReaction,
+      events: cardReturn.events,
     });
   };
 
@@ -176,17 +199,15 @@ class Board extends Component {
 
     const dObj = this.state.reaction.effects(
       players[instaIndex],
-      this.state.theDeck
-    ) || { player: players[instaIndex], theDeck: this.state.theDeck };
+      this.state.deck
+    ) || { player: players[instaIndex], deck: this.state.deck };
 
     players[instaIndex].tableau = [...dObj["player"].tableau];
 
     this.emitEvent({
-      state: {
-        players: players,
-        theDeck: dObj.theDeck,
-        reaction: emptyReaction,
-      },
+      players: players,
+      deck: dObj.deck,
+      reaction: emptyReaction,
     });
   };
 
@@ -194,53 +215,44 @@ class Board extends Component {
     const index = players.indexOf(player),
       cardIndex = players[index][this.state.reaction.location].indexOf(card);
 
-    let theDeck = new Deck(
-      this.state.theDeck.cards,
-      this.state.theDeck.discards
-    );
+    let deck = new Deck(this.state.deck.cards, this.state.deck.discards);
 
-    theDeck.serveCard(players[index].hand.splice(cardIndex, 1)[0]);
-    return { players, theDeck };
+    deck.serveCard(players[index].hand.splice(cardIndex, 1)[0]);
+    return { players, deck };
   };
 
   handleDraw = (pile) => {
     const players = [...this.state.players],
       discard = pile === "discard",
       playerIndex = players.findIndex((player) => {
-        return player.id === Number(this.props.query.id);
+        return player.id === Number(this.state.player_id);
       }),
       cardIndex = players[playerIndex][this.state.reaction.location]?.indexOf(
         this.state.reaction.card
       );
 
-    let theDeck = new Deck(
-      this.state.theDeck.cards,
-      this.state.theDeck.discards
-    );
+    let deck = new Deck(this.state.deck.cards, this.state.deck.discards);
 
-    if (!this.state.reaction.card && discard && theDeck.discards.length === 0)
+    if (!this.state.reaction.card && discard && deck.discards.length === 0)
       return;
 
     if (this.state.reaction.card) {
-      theDeck.serveCard(
+      deck.serveCard(
         players[playerIndex][this.state.reaction.location].splice(
           cardIndex,
           1
         )[0]
       );
       let reaction = emptyReaction;
-      this.emitEvent({ state: { players, theDeck, reaction } });
+      this.emitEvent({ players, deck, reaction });
     } else {
-      if (
-        theDeck.cards.length > 0 ||
-        (discard && theDeck.discards.length > 0)
-      ) {
-        players[playerIndex].hand.unshift(theDeck.drawCards(1, discard)[0]);
+      if (deck.cards.length > 0 || (discard && deck.discards.length > 0)) {
+        players[playerIndex].hand.unshift(deck.drawCards(1, discard)[0]);
         players[playerIndex].character.draw--;
-        this.emitEvent({ state: { players, theDeck } });
+        this.emitEvent({ players, deck });
       } else if (!discard) {
-        theDeck.shuffle();
-        this.emitEvent({ state: { theDeck } });
+        deck.shuffle();
+        this.emitEvent({ deck });
       }
     }
   };
@@ -255,7 +267,10 @@ class Board extends Component {
 
   turnOrder = () => {
     const players = [...this.state.players];
-    const playerIndex = this.findMe(this.props.query.id);
+    const playerIndex = this.findMe(this.state.player_id);
+
+    console.log(this.state.player_id);
+    console.log(playerIndex);
 
     const beforePlayer = players.splice(0, playerIndex);
 
@@ -305,15 +320,25 @@ class Board extends Component {
       this.endTurn();
     }
 
-    this.setState(players);
+    this.setState({ players });
     return true;
   };
 
   endTurn = () => {
-    // console.log(this.state.turn);
-    const currentIndex = this.findMe(this.state.turn),
-      player = this.state.players[currentIndex];
+    const players = [...this.state.players],
+      currentIndex = this.findMe(this.state.turn),
+      player = players[currentIndex];
 
+    //If player ends their turn in Jail, they're now free!
+    if (player.tableau.some((e) => e.name === "azkaban")) {
+      const jailLocation = player.tableau.findIndex(
+          (e) => e.name === "azkaban"
+        ),
+        deck = new Deck(this.state.deck.cards, this.state.deck.discards);
+
+      deck.serveCard(player.tableau.splice(jailLocation, 1)[0]);
+      this.emitEvent({ players, deck });
+    }
     this.clearTable();
 
     if (player.hand.length > player.character.health) {
@@ -342,10 +367,7 @@ class Board extends Component {
   };
 
   checkTopCard = (house) => {
-    const theDeck = new Deck(
-        this.state.theDeck.cards,
-        this.state.theDeck.discards
-      ),
+    const deck = new Deck(this.state.deck.cards, this.state.deck.discards),
       houses = {
         G: "Griffindor",
         S: "Slytherine",
@@ -354,7 +376,7 @@ class Board extends Component {
       },
       table = [...this.state.table];
 
-    table.push(theDeck.drawCards(1)[0]);
+    table.push(deck.drawCards(1)[0]);
 
     let gotit = false,
       checked = houses[table[table.length - 1].house];
@@ -366,13 +388,13 @@ class Board extends Component {
       }
     });
 
-    this.emitEvent({ state: { table, theDeck } });
+    this.emitEvent({ table, deck });
     return { gotit: gotit, house: checked };
   };
 
   checkAzkaban = () => {
     const players = [...this.state.players],
-      thisPlayer = this.findMe(this.props.query.id),
+      thisPlayer = this.findMe(this.state.player_id),
       topCard = this.checkTopCard([players[thisPlayer].character.house]);
 
     if (topCard.gotit) {
@@ -392,45 +414,48 @@ class Board extends Component {
 
   clearTable = () => {
     const table = [...this.state.table],
-      theDeck = new Deck(this.state.theDeck.cards, this.state.theDeck.discards),
+      deck = new Deck(this.state.deck.cards, this.state.deck.discards),
       players = [...this.state.players];
 
     for (let i = 0; i < table.length; i++) {
-      theDeck.serveCard(table[i]);
+      deck.serveCard(table[i]);
     }
 
-    if (players[this.findMe(this.props.query.id)]["my-turn"] === "azkaban") {
-      players[this.findMe(this.props.query.id)]["my-turn"] = true;
+    if (players[this.findMe(this.state.player_id)]["my-turn"] === "azkaban") {
+      players[this.findMe(this.state.player_id)]["my-turn"] = true;
     }
 
-    this.emitEvent({
-      state: { table: [], theDeck: theDeck, players: players },
-    });
+    this.emitEvent({ table: [], deck: deck, players: players });
     return true;
   };
 
   catchSocket = (data) => {
-    if (data.attack !== undefined) {
-      if (data.attack.target === this.props.query.id) {
-        if (data.attack.popup) {
-          this.setState({ actions: data.attack.popup });
+    console.log(data);
+    if (data.events && data.events.length > 0) {
+      if (data.events[0].target === this.state.player_id) {
+        if (data.events[0].popup) {
+          this.setState({ actions: data.events[[0]].popup });
         }
       }
     }
 
-    this.setState(data.state);
+    this.setState(data);
   };
 
-  emitEvent = (data) => {
-    this.setState(data.state);
-    socket.emit("player change", data);
+  emitEvent = (state) => {
+    this.setState(state);
+    socket.emit(
+      "player change",
+      Object.assign({ room: this.state.player_room }, state)
+    );
   };
 
   render() {
-    // this.props.emitEvent(this.props.query.id);
-    // if (this.findMe(this.props.query.id) !== 0) this.updateTurnOrder();
+    // this.props.emitEvent(this.state.player_id);
+    // if (this.findMe(this.state.player_id) !== 0) this.updateTurnOrder();
     // console.log("every change?");
     const orderedPlayers = this.turnOrder();
+    console.log(orderedPlayers);
     return (
       <React.Fragment>
         <div className="alert-holder">
@@ -453,11 +478,13 @@ class Board extends Component {
         </div>
         <div className="col-md-8">
           <CardDeck
+            player_id={this.state.player_id}
+            events={this.state.events}
             reaction={this.state.reaction}
             drawCard={this.handleDraw}
             checkTopCard={this.checkTopCard}
             azkaban={this.checkAzkaban}
-            theDeck={this.state.theDeck}
+            deck={this.state.deck}
             players={orderedPlayers}
           ></CardDeck>
           <Table
@@ -467,7 +494,8 @@ class Board extends Component {
           />
           {orderedPlayers.map((player, i) => (
             <Player
-              query={this.props.query}
+              player_id={this.state.player_id}
+              events={this.state.events}
               reaction={this.state.reaction}
               key={i}
               pindex={i}

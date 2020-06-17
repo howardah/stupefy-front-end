@@ -18,6 +18,7 @@ class SideBar extends Component {
     return (
       <div className="sidebar col-md-4">
         <div className="sidebar-inner">
+          <div className="room-name">{this.props.query.room}</div>
           <div className="players">
             {this.props.players.map((v, i) => (
               <div key={v.id} className={this.classes(v)}>

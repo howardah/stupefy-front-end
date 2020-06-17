@@ -28,6 +28,7 @@ class Stupefy extends Component {
     setupPlayers: setup.players,
     q: this.getQueryObj(),
     turn: 0,
+    events: [],
     isLoaded: false,
   };
 
@@ -41,11 +42,10 @@ class Stupefy extends Component {
         (result) => {
           console.log(result);
           this.setState({
-            setupDeck: new Deck(
-              result.initialDeck.cards,
-              result.initialDeck.discards
-            ),
-            setupPlayers: result.players,
+            setupDeck: new Deck(result[0].deck.cards, result[0].deck.discards),
+            turn: result[0].turn,
+            events: result[0].events || [],
+            setupPlayers: result[0].players,
             isLoaded: true,
           });
         },
@@ -61,14 +61,6 @@ class Stupefy extends Component {
       );
   }
 
-  nextTurn = () => {
-    let turn = this.state.turn;
-    turn++;
-    if (turn >= setup.players.length) turn = 0;
-
-    this.setState({ turn });
-  };
-
   render() {
     const { error, isLoaded, items } = this.state;
     if (error) {
@@ -76,20 +68,21 @@ class Stupefy extends Component {
     } else if (!isLoaded) {
       return <div className="loading">Loading...</div>;
     } else {
-      if (typeof this.state.q.id === "string") {
-        let q = Object.assign(this.state.q);
-        q.id = Number(q.id);
-      }
+      // if (typeof this.state.q.id === "string") {
+      let q = Object.assign(this.state.q);
+      q.id = Number(q.id);
+      // }
 
       return (
         <div className="container">
           <div className="row">
             <Board
               onRef={(ref) => (this.board = ref)}
-              query={this.state.q}
+              query={q}
               players={this.state.setupPlayers}
               deck={this.state.setupDeck}
               turn={this.state.turn}
+              events={this.state.events}
               stopTurn={this.nextTurn}
               emitEvent={this.props.emitFunction}
             />
@@ -100,43 +93,10 @@ class Stupefy extends Component {
   }
 }
 
-// class App extends Component {
-//   render() {
-//     return (
-//       <Router>
-//         <Route path="/" component={Stupefy} />
-//       </Router>
-//     );
-//   }
-// }
-
-// export default App;
-
-// const socket = socketIOClient(ENDPOINT);
 function App() {
-  // const [response, setResponse] = useState("");
-
-  // useEffect(() => {
-  //   socket.on("FromAPI", (data) => {
-  //     console.log(data);
-  //   });
-  // }, []);
-
-  const emit = (data) => {
-    // console.log(data);
-    // socket.emit(data);
-    // useEffect(()=>{
-    // socket = socketIOClient(ENDPOINT);
-    // socket.emit("player change", data);
-    // }
-  };
-
   return (
     <Router>
-      <Route
-        path="/"
-        render={(props) => <Stupefy {...props} emitFunction={emit} />}
-      />
+      <Route path="/" render={(props) => <Stupefy {...props} />} />
     </Router>
   );
 }

@@ -18,20 +18,22 @@ export const CardRules = (key, player) => {
         "require-reaction": ["target"],
         effect: (playerId, instigator) => {
           instigator.character.shots--;
-          const attack = {
-            popup: {
-              message:
-                instigator.character.name + " has fired a stupefy at you!",
-              options: [
-                { label: "Take a hit", function: "takeHit" },
-                { label: "Play Protego", function: "playProtego" },
-              ],
+          const events = [
+            {
+              popup: {
+                message:
+                  instigator.character.name + " has fired a stupefy at you!",
+                options: [
+                  { label: "Take a hit", function: "takeHit" },
+                  { label: "Play Protego", function: "playProtego" },
+                ],
+              },
+              cardType: "stupefy",
+              target: playerId,
             },
-            cardType: "stupefy",
-            target: playerId,
-          };
+          ];
 
-          return { attack };
+          return { events };
         },
       };
     case "aspen_wand":
@@ -42,8 +44,8 @@ export const CardRules = (key, player) => {
     case "blackthorn_wand":
       return {
         targets: ["my-tableau"],
-        effect: (player, deck) => {
-          let theDeck = new Deck(deck.cards, deck.discards);
+        effect: (player, odeck) => {
+          let deck = new Deck(odeck.cards, odeck.discards);
 
           let otherwands = [
             "aspen_wand",
@@ -58,9 +60,9 @@ export const CardRules = (key, player) => {
           const overlap = contains(player.tableau, otherwands);
 
           overlap !== -1 &&
-            theDeck.serveCard(player.tableau.splice(overlap, 1)[0]);
+            deck.serveCard(player.tableau.splice(overlap, 1)[0]);
 
-          return { player, theDeck };
+          return { player, deck };
         },
       };
     case "broomstick":
@@ -71,20 +73,20 @@ export const CardRules = (key, player) => {
     case "vanishing_cabinet":
       return {
         targets: ["my-tableau"],
-        effect: (player, deck) => {
-          let theDeck = new Deck(deck.cards, deck.discards);
+        effect: (player, odeck) => {
+          let deck = new Deck(odeck.cards, odeck.discards);
           const overlap = contains(player.tableau, [key]);
 
           if (overlap !== -1 && overlap !== player.tableau.length - 1)
-            theDeck.serveCard(player.tableau.splice(overlap, 1)[0]);
+            deck.serveCard(player.tableau.splice(overlap, 1)[0]);
 
-          return { player, theDeck };
+          return { player, deck };
         },
       };
     case "azkaban":
       return {
         targets: ["tableau"],
-        effect: (player, deck) => {
+        effect: (player, odeck) => {
           console.log(player);
         },
       };
@@ -107,7 +109,7 @@ export const CardRules = (key, player) => {
   }
 };
 
-export const resolveAttack = (key, player) => {
+export const resolveEvent = (key, player) => {
   switch (key) {
     case "stupefy":
       return {
@@ -135,8 +137,8 @@ export const resolveAttack = (key, player) => {
     case "blackthorn_wand":
       return {
         targets: ["my-tableau"],
-        effect: (player, deck) => {
-          let theDeck = new Deck(deck.cards, deck.discards);
+        effect: (player, odeck) => {
+          let deck = new Deck(odeck.cards, odeck.discards);
 
           let otherwands = [
             "aspen_wand",
@@ -151,9 +153,9 @@ export const resolveAttack = (key, player) => {
           const overlap = contains(player.tableau, otherwands);
 
           overlap !== -1 &&
-            theDeck.serveCard(player.tableau.splice(overlap, 1)[0]);
+            deck.serveCard(player.tableau.splice(overlap, 1)[0]);
 
-          return { player, theDeck };
+          return { player, deck };
         },
       };
     case "broomstick":
@@ -164,20 +166,20 @@ export const resolveAttack = (key, player) => {
     case "vanishing_cabinet":
       return {
         targets: ["my-tableau"],
-        effect: (player, deck) => {
-          let theDeck = new Deck(deck.cards, deck.discards);
+        effect: (player, odeck) => {
+          let deck = new Deck(odeck.cards, odeck.discards);
           const overlap = contains(player.tableau, [key]);
 
           if (overlap !== -1 && overlap !== player.tableau.length - 1)
-            theDeck.serveCard(player.tableau.splice(overlap, 1)[0]);
+            deck.serveCard(player.tableau.splice(overlap, 1)[0]);
 
-          return { player, theDeck };
+          return { player, deck };
         },
       };
     case "azkaban":
       return {
         targets: ["tableau"],
-        effect: (player, deck) => {
+        effect: (player, odeck) => {
           console.log(player);
         },
       };
@@ -199,5 +201,3 @@ export const resolveAttack = (key, player) => {
       return { targets: [], effect: "" };
   }
 };
-
-// export default CardRules, resolveAttack;

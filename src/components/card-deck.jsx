@@ -32,11 +32,11 @@ class CardDeck extends Component {
               : () => {}
           }
           extraClass={
-            (this.props.theDeck.cards[0] ? "draw" : "") +
+            (this.props.deck.cards[0] ? "draw" : "") +
             (this.isClickable("draw") ? " clickable" : "")
           }
           card={
-            this.props.theDeck.cards[0] || { name: "", fileName: "", house: "" }
+            this.props.deck.cards[0] || { name: "", fileName: "", house: "" }
           }
         />
         <Card
@@ -49,7 +49,7 @@ class CardDeck extends Component {
             "discard " + (this.isClickable("discard") ? "clickable" : "")
           }
           card={
-            this.props.theDeck.discards[0] || {
+            this.props.deck.discards[0] || {
               name: "",
               fileName: "",
               house: "",

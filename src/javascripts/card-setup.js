@@ -420,7 +420,7 @@ export const players = [
       hand: [initialDeck.drawCards(1)[0], initialDeck.drawCards(1)[0]],
     },
   ],
-  theDeck = initialDeck;
+  deck = initialDeck;
 
 export const emptyCard = { id: "", fileName: "", house: "", name: "" };
 

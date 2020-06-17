@@ -45,8 +45,10 @@ class Player extends Component {
   handClickable = (card) => {
     const thisPlayer = this.props.pindex === 0;
 
-    //if it's not my turn or if I'm in jail, don't move on
+    //if there's an event that's not for me, it's not my turn
+    //or if I'm in jail, don't move on
     if (
+      this.props.events[0]?.target === this.props.player_id ||
       !this.props.allPlayers[0]["my-turn"] ||
       this.props.allPlayers[0]["my-turn"] === "azkaban"
     )
@@ -59,20 +61,22 @@ class Player extends Component {
   };
 
   tableauClickable = () => {
-    //if it's not my turn or if I'm in jail, don't move on
+    //if there's an event that's not for me, it's not my turn
+    //or if I'm in jail, don't move on
     if (
+      this.props.events[0]?.target === this.props.player_id ||
       !this.props.allPlayers[0]["my-turn"] ||
       this.props.allPlayers[0]["my-turn"] === "azkaban"
     )
       return false;
     if (
       this.props.reaction.targets.indexOf("my-tableau") !== -1 &&
-      this.props.player.id === Number(this.props.query.id)
+      this.props.player.id === this.props.player_id
     ) {
       return true;
     } else if (
       this.props.reaction.targets.indexOf("tableau") !== -1 &&
-      this.props.player.id !== Number(this.props.query.id)
+      this.props.player.id !== this.props.player_id
     ) {
       return true;
     }
@@ -80,8 +84,10 @@ class Player extends Component {
   };
 
   characterClickable = () => {
-    //if it's not my turn or if I'm in jail, don't move on
+    //if there's an event that's not for me, it's not my turn
+    //or if I'm in jail, don't move on
     if (
+      this.props.events[0]?.target === this.props.player_id ||
       !this.props.allPlayers[0]["my-turn"] ||
       this.props.allPlayers[0]["my-turn"] === "azkaban"
     )
