@@ -10,125 +10,421 @@ const contains = (tableau, items) => {
   return -1;
 };
 
+function titleCase(str) {
+  str = str.toLowerCase().split(" ");
+  for (var i = 0; i < str.length; i++) {
+    str[i] = str[i].charAt(0).toUpperCase() + str[i].slice(1);
+  }
+  return str.join(" ");
+}
+
 export const CardRules = (key, player) => {
+  if (player["my-turn"] === "azkaban") return { targets: [] };
+
   switch (key) {
+    //=========== ====================== ===========//
+    //=========== ====================== ===========//
+    //=========== CHARACTER TARGET CARDS ===========//
+    //=========== ====================== ===========//
+    //=========== ====================== ===========//
+
+    // These are cards that are handled by the
+    // handleCharacterPlay() function. The effect inputs
+    // are the ”Subject”, ie the player that is being
+    // effected and the “Instigator”, ie the person playing
+    // the card.
+
     case "stupefy":
       return {
-        targets: player.character.shots > 0 ? ["others", "reach"] : [],
-        "require-reaction": ["target"],
-        effect: (playerId, instigator) => {
+        targets: player.character.shots > 0 ? ["others", "range"] : [],
+        effect: (subject, instigator) => {
           instigator.character.shots--;
+          let tableau = [],
+            popupOptions = [
+              { label: "Take a hit", function: "takeHit" },
+              { label: "Play Protego", function: "playProtego" },
+            ];
+
           const events = [
             {
               popup: {
                 message:
-                  instigator.character.name + " has fired a stupefy at you!",
-                options: [
-                  { label: "Take a hit", function: "takeHit" },
-                  { label: "Play Protego", function: "playProtego" },
-                ],
+                  instigator.character.shortName +
+                  " has fired a stupefy at you!",
+                options: [...popupOptions],
               },
+              instigator: instigator,
               cardType: "stupefy",
-              target: playerId,
+              target: [subject.id],
             },
           ];
 
           return { events };
         },
       };
-    case "aspen_wand":
-    case "yew_wand":
-    case "holly_wand":
-    case "elder_wand":
-    case "larch_wand":
-    case "blackthorn_wand":
+    case "wizards_duel":
       return {
-        targets: ["my-tableau"],
-        effect: (player, odeck) => {
-          let deck = new Deck(odeck.cards, odeck.discards);
-
-          let otherwands = [
-            "aspen_wand",
-            "yew_wand",
-            "holly_wand",
-            "elder_wand",
-            "larch_wand",
-            "blackthorn_wand",
+        targets: ["others"],
+        effect: (subject, instigator) => {
+          let waitMessage =
+            subject.character.shortName +
+            " and " +
+            instigator.character.shortName +
+            " are fighting in a wizard’s dual!";
+          const events = [
+            {
+              popup: {
+                message:
+                  instigator.character.shortName +
+                  " has challanged you to a Wizard’s dual!",
+                options: [
+                  { label: "Take a hit", function: "takeHit" },
+                  { label: "Play Stupefy", function: "dual" },
+                ],
+              },
+              bystanders: {
+                popupType: "subtle",
+                message: waitMessage,
+                options: [],
+              },
+              instigator: instigator,
+              cardType: "wizards_duel",
+              target: [subject.id],
+            },
           ];
 
-          otherwands.splice(otherwands.indexOf(key), 1);
-          const overlap = contains(player.tableau, otherwands);
-
-          overlap !== -1 &&
-            deck.serveCard(player.tableau.splice(overlap, 1)[0]);
-
-          return { player, deck };
+          return { events };
         },
       };
-    case "broomstick":
-    case "expecto_patronum":
-    case "invisibility_cloak":
-    case "polyjuice_potion":
-    case "resurrection_stone":
-    case "vanishing_cabinet":
+    case "butterbeer":
       return {
-        targets: ["my-tableau"],
-        effect: (player, odeck) => {
-          let deck = new Deck(odeck.cards, odeck.discards);
-          const overlap = contains(player.tableau, [key]);
+        targets: ["self"],
+        effect: (subject, instigator, addAlert) => {
+          if (subject.character.health >= subject.character["max-health"]) {
+            addAlert("you're already at max-health!");
+            return false;
+          }
+          subject.character.health++;
 
-          if (overlap !== -1 && overlap !== player.tableau.length - 1)
-            deck.serveCard(player.tableau.splice(overlap, 1)[0]);
+          // return false;
+          return true;
+        },
+      };
 
-          return { player, deck };
-        },
-      };
-    case "azkaban":
-      return {
-        targets: ["tableau"],
-        effect: (player, odeck) => {
-          console.log(player);
-        },
-      };
-    case "fiendfyre":
-      return {
-        targets: ["tableau"],
-        effect: (player) => {
-          console.log(player);
-        },
-      };
-    case "dementors":
+    //=========== ====================== ===========//
+    //=========== ====================== ===========//
+    //=========== = TABLE TARGET CARDS = ===========//
+    //=========== ====================== ===========//
+    //=========== ====================== ===========//
+
+    // These are cards that are handled by the
+    // handleTablePlay() function. The effect inputs
+    // are the Instigator, ie the player that is
+    // playing the card.
+
+    case "expelliarmus":
+    case "expelliarmus_1":
+    case "expelliarmus_2":
+    case "expelliarmus_3":
       return {
         targets: ["table"],
-        effect: (oplayers) => {
-          console.log(oplayers);
+        effect: (instigator, that) => {
+          const players = [...that.state.players];
+          let possibleCards = [];
+          for (let i = 0; i < players.length; i++) {
+            let player = players[i];
+            if (player.id === instigator.id) continue;
+            possibleCards.push(...player.hand);
+            possibleCards.push(...player.tableau);
+          }
+
+          if (possibleCards.length === 0) {
+            that.addAlert("No one has any cards!");
+            return false;
+          }
+
+          const events = [
+            {
+              popup: {
+                popupType: "subtle",
+                message: "Choose another player’s card to discard",
+                options: [],
+              },
+              instigator: instigator,
+              cardType: "expelliarmus",
+              target: [instigator.id],
+            },
+          ];
+
+          that.addAction(events[0].popup);
+          return { events };
         },
       };
-    default:
-      return { targets: [], effect: "" };
-  }
-};
-
-export const resolveEvent = (key, player) => {
-  switch (key) {
-    case "stupefy":
+    case "accio":
       return {
-        targets: player.character.shots > 0 ? ["others", "reach"] : [],
-        "require-reaction": ["target"],
-        effect: (oPlayers, playerIndex) => {
-          let players = [...oPlayers],
-            instigator = players.findIndex((player) => {
-              return player["my-turn"];
+        targets: ["table"],
+        effect: (instigator, that) => {
+          //Check that you can steal something first.
+          const players = [...that.state.players],
+            instaIndex = that.findMe(instigator.id),
+            range = players[instaIndex].tableau.some(
+              (card) => card.name === "polyjuice_potion"
+            )
+              ? 2
+              : 1;
+
+          let possibleCards = [];
+
+          for (let i = 0; i < players.length; i++) {
+            let localrange = range,
+              adjustedIndexP = i,
+              adjustedIndexN = i;
+
+            players[i].tableau.forEach((card) => {
+              if (card.power?.distance !== undefined) {
+                let distance = card.power.distance;
+                localrange -= distance > 0 ? distance : 0;
+              }
             });
 
-          players[playerIndex].character.health--;
-          players[instigator].character.shots--;
+            adjustedIndexP = i + localrange;
+            adjustedIndexN = i - localrange;
 
-          let newOrder = players.splice(0, 3);
+            if (adjustedIndexP > players.length - 1)
+              adjustedIndexP = adjustedIndexP - players.length;
+            if (adjustedIndexN < 0)
+              adjustedIndexN = players.length + adjustedIndexN;
 
-          return { players: [...players, ...newOrder] };
+            if (
+              adjustedIndexP === instaIndex ||
+              adjustedIndexN === instaIndex
+            ) {
+              possibleCards.push(...players[i].hand);
+              possibleCards.push(...players[i].tableau);
+            }
+          }
+
+          if (possibleCards.length === 0) {
+            that.addAlert(
+              "There are no cards within range than you can steal!"
+            );
+            return false;
+          }
+
+          const events = [
+            {
+              popup: {
+                popupType: "subtle",
+                message: "Choose a player’s card to steal",
+                options: [],
+              },
+              instigator: instigator,
+              cardType: "accio",
+              target: [instigator.id],
+            },
+          ];
+
+          that.addAction(events[0].popup);
+          return { events };
         },
       };
+    case "three_broomsticks":
+      return {
+        targets: ["table"],
+        effect: (instigator, that) => {
+          const players = [...that.state.players];
+
+          for (let i = 0; i < players.length; i++) {
+            if (
+              players[i].character.health < players[i].character["max-health"]
+            ) {
+              players[i].character.health++;
+            }
+          }
+
+          that.emitEvent({ players });
+
+          return "discard";
+        },
+      };
+    case "weasleys_wizard_weezes":
+      return {
+        targets: ["table"],
+        effect: (instigator, that) => {
+          const players = [...that.state.players],
+            player = players[that.findMe(instigator.id)];
+
+          player.character.draw += 3;
+          that.emitEvent({ player });
+          return "discard";
+        },
+      };
+    case "honeydukes":
+      return {
+        targets: ["table"],
+        effect: (instigator, that) => {
+          const players = [...that.state.players],
+            player = players[that.findMe(instigator.id)];
+
+          player.character.draw += 2;
+          that.emitEvent({ player });
+          return "discard";
+        },
+      };
+    case "diagon_alley":
+      return {
+        targets: ["table"],
+        effect: (instigator, that, table, deck) => {
+          const players = [...that.state.players],
+            instaIndex = that.findMe(instigator.id),
+            // table = [...that.state.table],
+            // deck = new Deck(that.state.deck.cards, that.state.deck.discards),
+            events = [...that.state.events];
+
+          table.push(...deck.drawCards(5));
+
+          for (let i = 0; i < players.length; i++) {
+            let adjustedIndex = i + instigator.id;
+
+            if (adjustedIndex > players.length - 1)
+              adjustedIndex = adjustedIndex - players.length;
+
+            let mainMessage =
+              i === instaIndex
+                ? "Diagon Alley! Take a card from the table!"
+                : instigator.character.shortName +
+                  " has played Diagon Alley! Your turn to take a card!";
+
+            let waitMessage =
+              i === instaIndex
+                ? "Everyone else is choosing their cards."
+                : instigator.character.shortName + " has played Diagon Alley!";
+
+            events.push({
+              popup: {
+                popupType: "subtle",
+                message: mainMessage,
+                options: [],
+              },
+              bystanders: {
+                popupType: "subtle",
+                message: waitMessage,
+                options: [],
+              },
+              instigator: instigator,
+              cardType: "diagon_alley",
+              target: [adjustedIndex],
+            });
+          }
+
+          // that.addAction(events[0].popup);
+          that.emitEvent({ events });
+
+          // that.emitEvent({ table, deck, events });
+          // return false;
+          return "discard";
+        },
+      };
+    case "dementors":
+      return {
+        targets: ["table"],
+        effect: (instigator, that) => {
+          const instaIndex = that.findMe(instigator.id);
+          let targets = [];
+          // let waitMessage = "Demontor attack! You’re safe.";
+          that.state.players.forEach((player, i) => {
+            if (i === instaIndex) return;
+            if (
+              !player.tableau.some((card) => card.name === "expecto_patronum")
+            ) {
+              targets.push(player.id);
+            }
+          });
+
+          const events = [...that.state.events],
+            dementorEvent = {
+              popup: {
+                message:
+                  "Dementors attack! Play a Stupefy card to fight them off!",
+                options: [
+                  {
+                    label: "Take a hit",
+                    function: "takeHit",
+                  },
+                  {
+                    label: "Play a stupefy",
+                    function: "playStupefy",
+                  },
+                ],
+              },
+              bystanders: {
+                popupType: "subtle",
+                message: "Whoosh, you’re past the Dementors now!",
+                options: [],
+              },
+              instigator: instigator,
+              cardType: "wizards_duel",
+              target: [...targets],
+            };
+
+          events.push(dementorEvent);
+
+          that.emitEvent({ events });
+
+          return true;
+        },
+      };
+    case "garroting_gas":
+      return {
+        targets: ["table"],
+        effect: (instigator, that) => {
+          const targets = [...Array(that.state.players.length).keys()];
+
+          const events = [...that.state.events],
+            garroting_gas = {
+              popup: {
+                message:
+                  instigator.character.shortName +
+                  " played Garroting Gas! Eveyone must cast a protego card or take a hit.",
+                options: [
+                  {
+                    label: "Take a hit",
+                    function: "takeHit",
+                  },
+                  {
+                    label: "Cast a protego",
+                    function: "playProtego",
+                  },
+                ],
+              },
+              bystanders: {
+                popupType: "subtle",
+                message: "Whoosh, you’re safe now!",
+                options: [],
+              },
+              instigator: instigator,
+              cardType: "garroting_gas",
+              target: [...targets],
+            };
+
+          events.push(garroting_gas);
+
+          that.emitEvent({ events });
+
+          return true;
+        },
+      };
+
+    //=========== ====================== ===========//
+    //=========== ====================== ===========//
+    //===========  TABLEAU TARGET CARDS  ===========//
+    //=========== ====================== ===========//
+    //=========== ====================== ===========//
+
+    // These are cards that are handled by the
+    // handleTableauPlay() function. The effect inputs
+    // are the Instigator, ie the player that is
+    // playing the card.
     case "aspen_wand":
     case "yew_wand":
     case "holly_wand":
@@ -137,9 +433,7 @@ export const resolveEvent = (key, player) => {
     case "blackthorn_wand":
       return {
         targets: ["my-tableau"],
-        effect: (player, odeck) => {
-          let deck = new Deck(odeck.cards, odeck.discards);
-
+        effect: (player, that) => {
           let otherwands = [
             "aspen_wand",
             "yew_wand",
@@ -152,10 +446,14 @@ export const resolveEvent = (key, player) => {
           otherwands.splice(otherwands.indexOf(key), 1);
           const overlap = contains(player.tableau, otherwands);
 
-          overlap !== -1 &&
-            deck.serveCard(player.tableau.splice(overlap, 1)[0]);
+          if (overlap !== -1) {
+            that.addAlert(
+              "You cannot hold more than one wand! Discard your current one to add another."
+            );
+            return false;
+          }
 
-          return { player, deck };
+          return true;
         },
       };
     case "broomstick":
@@ -166,35 +464,75 @@ export const resolveEvent = (key, player) => {
     case "vanishing_cabinet":
       return {
         targets: ["my-tableau"],
-        effect: (player, odeck) => {
-          let deck = new Deck(odeck.cards, odeck.discards);
+        effect: (player, that) => {
+          // let deck = new Deck(odeck.cards, odeck.discards);
           const overlap = contains(player.tableau, [key]);
 
-          if (overlap !== -1 && overlap !== player.tableau.length - 1)
-            deck.serveCard(player.tableau.splice(overlap, 1)[0]);
+          // if (overlap !== -1 && overlap !== player.tableau.length - 1)
+          // deck.serveCard(player.tableau.splice(overlap, 1)[0]);
 
-          return { player, deck };
+          if (overlap !== -1) {
+            that.addAlert(
+              "You cannot hold more than one “" +
+                titleCase(key.replace("_", " ")) +
+                "”!"
+            );
+            return false;
+          }
+
+          return true;
         },
       };
     case "azkaban":
       return {
         targets: ["tableau"],
-        effect: (player, odeck) => {
+        effect: (player, that) => {
+          const overlap = contains(player.tableau, [key]);
+
           console.log(player);
+          if (overlap !== -1) {
+            that.addAlert("They’re already in Azkaban!");
+            return false;
+          }
+
+          return true;
         },
       };
     case "fiendfyre":
       return {
         targets: ["tableau"],
-        effect: (player) => {
+        effect: (player, that) => {
+          const subject = player,
+            instigator = that.state.reaction.instigator;
           console.log(player);
-        },
-      };
-    case "dementors":
-      return {
-        targets: ["table"],
-        effect: (oplayers) => {
-          console.log(oplayers);
+
+          const events = [...that.state.events],
+            fiendfyreEvent = {
+              popup: {
+                message:
+                  instigator.character.shortName + " has played Fiendfyre!",
+                options: [
+                  {
+                    label: "Draw to see if you make it past",
+                    function: "fiendfyre",
+                  },
+                ],
+              },
+              bystanders: {
+                popupType: "subtle",
+                message:
+                  instigator.character.shortName +
+                  " has played Fiendfyre! It’s " +
+                  subject.character.shortName +
+                  "’s turn to draw.",
+                options: [],
+              },
+              instigator: instigator,
+              cardType: "wizards_duel",
+              target: [subject.id],
+            };
+
+          return false;
         },
       };
     default:

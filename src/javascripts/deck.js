@@ -22,6 +22,10 @@ export const Deck = class {
     this.discards.unshift(inCard);
   }
 
+  copy() {
+    return [this.cards, this.discards];
+  }
+
   shuffle() {
     let toShuffle = [...this.cards, ...this.discards];
 

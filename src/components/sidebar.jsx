@@ -11,6 +11,12 @@ class SideBar extends Component {
   };
 
   myTurn = () => {
+    if (
+      this.props.events[0] &&
+      this.props.events[0]?.target !== this.props.player_id
+    )
+      return false;
+
     return this.props.turn === this.props.query.id;
   };
 

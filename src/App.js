@@ -30,24 +30,36 @@ class Stupefy extends Component {
     turn: 0,
     events: [],
     isLoaded: false,
+    table: [],
   };
 
   componentDidMount() {
-    fetch(
-      "http://127.0.0.1:4001/database/players/" +
-        this.props.location.search.toLowerCase()
-    )
+    const apiLocation =
+      (process.env.NODE_ENV !== "development"
+        ? ""
+        : window.location.origin.replace(window.location.port, "4001")) +
+      "/database/players/";
+
+    fetch(apiLocation + this.props.location.search.toLowerCase())
       .then((res) => res.json())
       .then(
         (result) => {
-          console.log(result);
-          this.setState({
-            setupDeck: new Deck(result[0].deck.cards, result[0].deck.discards),
-            turn: result[0].turn,
-            events: result[0].events || [],
-            setupPlayers: result[0].players,
-            isLoaded: true,
-          });
+          if (result) {
+            console.log(result);
+            this.setState({
+              setupDeck: new Deck(
+                result[0].deck.cards,
+                result[0].deck.discards
+              ),
+              turn: result[0].turn,
+              events: result[0].events || [],
+              table: result[0].table || [],
+              setupPlayers: result[0].players,
+              isLoaded: true,
+            });
+          } else {
+            this.setState({ isLoaded: "no-room" });
+          }
         },
         // Note: it's important to handle errors here
         // instead of a catch() block so that we don't swallow
@@ -67,6 +79,8 @@ class Stupefy extends Component {
       return <div>Error: {error.message}</div>;
     } else if (!isLoaded) {
       return <div className="loading">Loading...</div>;
+    } else if (isLoaded === "no-room") {
+      return <div className="loading">This room doesn’t exist!</div>;
     } else {
       // if (typeof this.state.q.id === "string") {
       let q = Object.assign(this.state.q);
@@ -85,6 +99,7 @@ class Stupefy extends Component {
               events={this.state.events}
               stopTurn={this.nextTurn}
               emitEvent={this.props.emitFunction}
+              table={this.state.table}
             />
           </div>
         </div>
