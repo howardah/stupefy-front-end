@@ -2,6 +2,17 @@ const cardObj = {
   accio: "bow",
 };
 
+style = () => {
+  if (this.props.myCard === undefined || this.props.myCard) {
+    this.props.card.fileName === ""
+      ? {}
+      : {
+          backgroundImage:
+            "url('/images/stupefy/" + this.props.card.fileName + ".jpg')",
+        };
+  }
+};
+
 class Card extends React.Component {
   render() {
     return (
@@ -9,14 +20,7 @@ class Card extends React.Component {
         onClick={() => this.props.playCard(this.props.player, this.props.card)}
         cardName={this.props.card.fileName}
         className={this.props.card.fileName + " card " + this.props.extraClass}
-        style={
-          this.props.card.fileName === ""
-            ? {}
-            : {
-                backgroundImage:
-                  "url('/images/stupefy/" + this.props.card.fileName + ".jpg')",
-              }
-        }
+        style={this.style()}
       ></div>
     );
   }

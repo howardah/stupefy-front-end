@@ -1,4 +1,5 @@
 import { Deck } from "../javascripts/deck";
+import { titleCase } from "./utils/tools";
 
 const contains = (tableau, items) => {
   if (tableau.some((item) => items.includes(item.name))) {
@@ -9,14 +10,6 @@ const contains = (tableau, items) => {
 
   return -1;
 };
-
-function titleCase(str) {
-  str = str.toLowerCase().split(" ");
-  for (var i = 0; i < str.length; i++) {
-    str[i] = str[i].charAt(0).toUpperCase() + str[i].slice(1);
-  }
-  return str.join(" ");
-}
 
 export const CardRules = (key, player) => {
   if (player["my-turn"] === "azkaban") return { targets: [] };
@@ -152,6 +145,13 @@ export const CardRules = (key, player) => {
               },
               instigator: instigator,
               cardType: "expelliarmus",
+              bystanders: {
+                popupType: "subtle",
+                message:
+                  instigator.character.shortName +
+                  " is choosing a card to discard.",
+                options: [],
+              },
               target: [instigator.id],
             },
           ];
@@ -221,6 +221,13 @@ export const CardRules = (key, player) => {
               instigator: instigator,
               cardType: "accio",
               target: [instigator.id],
+              bystanders: {
+                popupType: "subtle",
+                message:
+                  instigator.character.shortName +
+                  " is choosing a card to steal.",
+                options: [],
+              },
             },
           ];
 
@@ -255,7 +262,7 @@ export const CardRules = (key, player) => {
             player = players[that.findMe(instigator.id)];
 
           player.character.draw += 3;
-          that.emitEvent({ player });
+          that.emitEvent({ players });
           return "discard";
         },
       };
@@ -267,7 +274,7 @@ export const CardRules = (key, player) => {
             player = players[that.findMe(instigator.id)];
 
           player.character.draw += 2;
-          that.emitEvent({ player });
+          that.emitEvent({ players });
           return "discard";
         },
       };
@@ -283,11 +290,11 @@ export const CardRules = (key, player) => {
 
           table.push(...deck.drawCards(5));
 
-          for (let i = 0; i < players.length; i++) {
-            let adjustedIndex = i + instigator.id;
+          for (let i = 0; i < that.turnOrder; i++) {
+            let adjustedIndex = i + that.state.turnOrder.indexOf(instigator.id);
 
-            if (adjustedIndex > players.length - 1)
-              adjustedIndex = adjustedIndex - players.length;
+            if (adjustedIndex >= that.state.turnOrder.length)
+              adjustedIndex = adjustedIndex - that.state.turnOrder.length;
 
             let mainMessage =
               i === instaIndex
@@ -313,7 +320,7 @@ export const CardRules = (key, player) => {
               },
               instigator: instigator,
               cardType: "diagon_alley",
-              target: [adjustedIndex],
+              target: [that.state.turnOrder[adjustedIndex]],
             });
           }
 
@@ -378,7 +385,7 @@ export const CardRules = (key, player) => {
       return {
         targets: ["table"],
         effect: (instigator, that) => {
-          const targets = [...Array(that.state.players.length).keys()];
+          const targets = [...that.state.turnOrder];
 
           const events = [...that.state.events],
             garroting_gas = {
@@ -502,21 +509,30 @@ export const CardRules = (key, player) => {
       return {
         targets: ["tableau"],
         effect: (player, that) => {
-          const subject = player,
-            instigator = that.state.reaction.instigator;
+          const players = [...that.state.players],
+            subject = players[that.findMe(player.id)],
+            instigator =
+              players[that.findMe(that.state.reaction.instigator.id)],
+            cardIndex = instigator.hand.findIndex(
+              (card) => card.id === that.state.reaction.card.id
+            ),
+            deck = new Deck(that.state.deck.cards, that.state.deck.discards);
+
           console.log(player);
 
           const events = [...that.state.events],
             fiendfyreEvent = {
               popup: {
                 message:
-                  instigator.character.shortName + " has played Fiendfyre!",
+                  instigator.character.shortName +
+                  " has played Fiendfyre! Draw a card to see if you make it past",
                 options: [
-                  {
-                    label: "Draw to see if you make it past",
-                    function: "fiendfyre",
-                  },
+                  // {
+                  //   label: "Draw to see if you make it past",
+                  //   function: "fiendfyre",
+                  // },
                 ],
+                popupType: "subtle",
               },
               bystanders: {
                 popupType: "subtle",
@@ -528,9 +544,15 @@ export const CardRules = (key, player) => {
                 options: [],
               },
               instigator: instigator,
-              cardType: "wizards_duel",
+              cardType: "fiendfyre",
               target: [subject.id],
             };
+
+          events.push(fiendfyreEvent);
+
+          deck.serveCard(instigator.hand.splice(cardIndex, 1)[0]);
+
+          that.emitEvent({ events, players });
 
           return false;
         },

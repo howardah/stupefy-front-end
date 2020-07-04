@@ -7,22 +7,22 @@ class SideBar extends Component {
 
   classes = (v) => {
     if (v.id === this.props.turn) return "current-player";
+    if (this.props.that.deadPlayers.includes(v.id)) return "dead";
     return "";
   };
 
   myTurn = () => {
-    if (
-      this.props.events[0] &&
-      this.props.events[0]?.target !== this.props.player_id
-    )
-      return false;
-
+    if (this.props.that.turnCycle.phase !== "initial") return false;
     return this.props.turn === this.props.query.id;
   };
 
   render() {
     return (
-      <div className="sidebar col-md-4">
+      <div
+        className={
+          "sidebar col-md-4" + (this.props.that.showCards ? "" : " hidden")
+        }
+      >
         <div className="sidebar-inner">
           <div className="room-name">{this.props.query.room}</div>
           <div className="players">
@@ -33,10 +33,18 @@ class SideBar extends Component {
             ))}
           </div>
 
-          <button disabled={!this.myTurn()} onClick={this.props.endTurn}>
+          <div
+            className={"button" + (!this.myTurn() ? " disabled" : "")}
+            onClick={this.myTurn() ? this.props.endTurn : () => {}}
+          >
             End Turn
-          </button>
-          <button onClick={this.props.endTurn}>Next</button>
+          </div>
+          <div
+            className={"role " + this.props.players[0].role.replace(" ", "_")}
+          ></div>
+        </div>
+        <div className="hidebar">
+          <div className="inner" onClick={this.props.toggleCards}></div>
         </div>
       </div>
     );

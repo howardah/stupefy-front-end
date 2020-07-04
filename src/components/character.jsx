@@ -22,9 +22,7 @@ class Character extends Card {
               this.props.character.fileName +
               ".jpg')",
           }}
-          onClick={() =>
-            this.props.playCard(this.props.player, this.props.character)
-          }
+          onClick={this.props.playCard}
         ></div>
         <div className="health card">
           {Array.from(Array(this.props.character.health).keys())

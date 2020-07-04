@@ -1,46 +1,55 @@
 import React, { Component } from "react";
 import Card from "./card";
+import { drawFunctions } from "../javascripts/event-functions";
 
 class CardDeck extends Component {
-  jailed = () => {
+  myTurn = () => {
+    return !this.props.players[0]["my-turn"];
+  };
+  myEvent = () => {
     return (
-      !this.props.players[0]["my-turn"] ||
-      (this.props.events[0] &&
-        !this.props.events[0]?.target.includes(this.props.player_id))
+      this.props.events[0] &&
+      this.props.events[0]?.cardType !== "resolution" &&
+      !this.props.events[0]?.target.includes(this.props.player_id)
     );
   };
   isDrawClickable = () => {
-    //if it's not my turn or if I'm in jail, don't move on
-    if (this.jailed()) return false;
-    const thisChar = this.props.players[0].character;
-    if (thisChar.draw > 0) return true;
-
-    if (this.props.players[0]["my-turn"] === "azkaban") return true;
-
+    if (this.props.targets.includes("draw")) return true;
     return false;
   };
   isDiscardClickable = () => {
-    //if it's not my turn or if I'm in jail, don't move on
-    if (this.jailed()) return false;
-
-    const thisChar = this.props.players[0].character;
-    if (
-      this.props.reaction.card[0] ||
-      (thisChar.power.discard && thisChar.draw > 1)
-    )
-      return true;
-
+    if (this.props.targets.includes("discard")) return true;
     return false;
   };
+
+  // playFuction = () => {
+  //   if (this.isDrawClickable()) {
+  //     if (this.props.players[0]["my-turn"] === "azkaban") {
+  //       this.props.azkaban();
+  //     } else if (
+  //       this.props.events[0] &&
+  //       drawFunctions[this.props.events[0].cardType] !== undefined
+  //     ) {
+  //       this.props.eventFunctions(
+  //         this.props.players[0],
+  //         "draw",
+  //         this.props.events[0].cardType
+  //       );
+  //     } else {
+  //       this.props.drawCard("draw");
+  //     }
+  //   }
+  // };
+
   render() {
     return (
       <div className="piles">
         <Card
           playCard={
-            this.props.players[0]["my-turn"] === "azkaban"
-              ? () => this.props.azkaban()
-              : this.isDrawClickable()
-              ? () => this.props.drawCard("draw")
+            this.isDrawClickable()
+              ? () => {
+                  this.props.deckClick("draw");
+                }
               : () => {}
           }
           extraClass={
@@ -54,7 +63,9 @@ class CardDeck extends Component {
         <Card
           playCard={
             this.isDiscardClickable()
-              ? () => this.props.drawCard("discard")
+              ? () => {
+                  this.props.deckClick("discard");
+                }
               : () => {}
           }
           extraClass={

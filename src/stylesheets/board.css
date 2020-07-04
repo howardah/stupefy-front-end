@@ -60,6 +60,12 @@
   overflow: scroll;
   white-space: nowrap;
   border-top: solid 1px #c5c5c5;
+  transition: 0.5s bottom;
+}
+
+.this-player .hand.collapsed {
+  bottom: -270px;
+  transition: 0.5s bottom;
 }
 
 .this-player .hand .card {
