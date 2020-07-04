@@ -16,6 +16,7 @@
   left: 25px;
   font-style: italic;
   font-weight: 900;
+  font-family: "Vollkorn", serif;
 }
 
 .card.R:after {
@@ -56,8 +57,13 @@
   box-shadow: 0px 0px 11px 4px #ffc107;
 }
 
-.card.selected {
+.this-player .card.selected,
+.character .card.selected {
   /* cursor: inherit; */
   box-shadow: 0px 0px 11px 4px #0761ff;
   z-index: 10;
+}
+
+.tableau .card.selected.fiendfyre {
+  box-shadow: 0px 0px 11px 4px #b4482a;
 }

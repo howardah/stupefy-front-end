@@ -14,12 +14,25 @@ export const Deck = class {
     return this.cards.splice(0, number);
   }
 
+  drawCard(discard) {
+    if (discard) return this.discards.splice(0, 1)[0];
+    if (this.cards.length === 0) this.shuffle();
+    return this.cards.splice(0, 1)[0];
+  }
+
   backToTheTop(cards) {
     this.cards.unshift(cards);
   }
 
   serveCard(inCard) {
     this.discards.unshift(inCard);
+  }
+  serveCards(inCards) {
+    this.discards.splice(0, 0, ...inCards);
+  }
+
+  copy() {
+    return [this.cards, this.discards];
   }
 
   shuffle() {

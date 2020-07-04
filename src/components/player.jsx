@@ -2,105 +2,168 @@ import React, { Component } from "react";
 import Character from "./character";
 import Card from "./card";
 import { emptyCard } from "../javascripts/card-setup";
+import "../stylesheets/players.css";
 
 class Player extends Component {
   state = {};
-
   checkDistance = (rangeOverride) => {
-    let range = 0;
-    //Check player's range of attack
-    for (let i = 0; i < this.props.allPlayers[0].tableau.length; i++) {
-      if (this.props.allPlayers[0].tableau[i].power?.range !== undefined)
-        range += this.props.allPlayers[0].tableau[i].power.range;
-    }
-    //Range of one unless of powerups
-    if (range === 0) range = 1;
+    // Dead players can’t have cards to worry about
+    if (this.props.player.character.health === 0) return false;
 
-    //check if the opponent has distancing powers
-    for (let i = 0; i < this.props.player.tableau.length; i++) {
-      if (this.props.player.tableau[i].power?.distance !== undefined)
-        range -= this.props.player.tableau[i].power.distance;
-    }
+    // Filter players by whether or not they’re alive
+    const players = this.props.players.filter((p) => p.character.health > 0),
+      activePlayer = players.filter((p) => p.id === this.props.player_id)[0],
+      thisIndex = players.findIndex((p) => p.id === this.props.player.id);
 
-    //Range cannot be less than 0
-    if (range < 0) range = 0;
+    let range = 1;
 
     //Range override for things that are always a distance of 1
     if (rangeOverride) range = rangeOverride;
 
-    if (
-      this.props.pindex <= range ||
-      this.props.allPlayers.length - this.props.pindex <= range
-    )
-      return true;
+    //Check player's range of attack
+    for (let i = 0; i < activePlayer.tableau.length; i++) {
+      //Check for polyjuice potions
+      if (activePlayer.tableau[i].power?.distance !== undefined) {
+        let distance = activePlayer.tableau[i].power.distance;
+        range += distance > 0 ? 0 : -distance;
+      }
+
+      if (rangeOverride) continue;
+
+      //Count wands only when range isn't overridden.
+      if (activePlayer.tableau[i].power?.range !== undefined)
+        range += activePlayer.tableau[i].power.range - 1;
+    }
+
+    // Lupin is always one closer
+    if (activePlayer.character.fileName === "remus_lupin") range++;
+
+    //check if the opponent has distancing powers
+    for (let i = 0; i < this.props.player.tableau.length; i++) {
+      //Check for brooms
+      if (this.props.player.tableau[i].power?.distance !== undefined) {
+        let distance = this.props.player.tableau[i].power.distance;
+        range -= distance > 0 ? distance : 0;
+      }
+    }
+
+    //Range cannot be less than 0
+    // if (range < 0) range = 0;
+
+    // console.log(
+    //   "index: " +
+    //     thisIndex +
+    //     " range: " +
+    //     range +
+    //     " | " +
+    //     (thisIndex <= range) +
+    //     " | " +
+    //     (players.length - thisIndex <= range)
+    // );
+
+    if (thisIndex <= range || players.length - thisIndex <= range) return true;
     return false;
   };
 
   playerClasses = () => {
-    return this.props.pindex === 0
-      ? "player this-player"
-      : "player other-player";
+    let classes = "player";
+    classes += this.props.index === 0 ? " this-player" : " other-player";
+
+    if (this.props.that.deadPlayers.includes(this.props.player.id)) {
+      classes += " dead";
+      if (this.props.player.role !== "auror") {
+        classes += " " + this.props.player.role.replace(" ", "_");
+      } else {
+        classes += " auror_" + Math.ceil(Math.random() * 2);
+      }
+    }
+
+    if (this.props.player.role === "minister") classes += " minister";
+    if (
+      this.props.player.role === "death eater" &&
+      this.props.players[0].character.fileName === "mad-eye_moody"
+    )
+      classes += " death-eater";
+
+    return classes;
   };
 
-  handClickable = (card) => {
-    const thisPlayer = this.props.pindex === 0;
-
-    //if there's an event that's not for me, it's not my turn
-    //or if I'm in jail, don't move on
-    if (
-      this.props.events[0]?.target === this.props.player_id ||
-      !this.props.allPlayers[0]["my-turn"] ||
-      this.props.allPlayers[0]["my-turn"] === "azkaban"
-    )
+  handClickable = (card, location) => {
+    // If it’s a ranged card, then check the range
+    if (this.props.targets.includes("range") && !this.checkDistance(1))
       return false;
-    if (thisPlayer && card.fileName !== "") return true;
-    if (card.fileName === "" && this.tableauClickable()) {
+    if (
+      this.props.player.id === this.props.player_id &&
+      this.props.targets.includes("my-hand")
+    )
       return true;
-    }
+    if (
+      this.props.player.id !== this.props.player_id &&
+      this.props.targets.includes("hand")
+    )
+      return true;
     return false;
   };
 
-  tableauClickable = () => {
-    //if there's an event that's not for me, it's not my turn
-    //or if I'm in jail, don't move on
-    if (
-      this.props.events[0]?.target === this.props.player_id ||
-      !this.props.allPlayers[0]["my-turn"] ||
-      this.props.allPlayers[0]["my-turn"] === "azkaban"
-    )
+  tableauClickable = (card) => {
+    // You cannot steal or discard an azkaban card
+    if (card.fileName === "azkaban") return false;
+
+    // If it’s a ranged card, then check the range
+    if (this.props.targets.includes("range") && !this.checkDistance(1))
       return false;
-    if (
-      this.props.reaction.targets.indexOf("my-tableau") !== -1 &&
-      this.props.player.id === this.props.player_id
-    ) {
-      return true;
-    } else if (
-      this.props.reaction.targets.indexOf("tableau") !== -1 &&
-      this.props.player.id !== this.props.player_id
-    ) {
-      return true;
+
+    // Check if the targets include my tableau's cards or empty spaces
+    if (this.props.player.id === this.props.player_id) {
+      if (card.fileName !== "" && this.props.targets.includes("my-tableau"))
+        return true;
+      if (
+        card.fileName === "" &&
+        this.props.targets.includes("my-tableau-empty")
+      )
+        return true;
+    }
+
+    // Check if the targets include other tableau's cards or empty spaces
+    if (this.props.player.id !== this.props.player_id) {
+      if (card.fileName !== "" && this.props.targets.includes("tableau"))
+        return true;
+      if (card.fileName === "" && this.props.targets.includes("tableau-empty"))
+        return true;
     }
     return false;
   };
 
   characterClickable = () => {
-    //if there's an event that's not for me, it's not my turn
-    //or if I'm in jail, don't move on
-    if (
-      this.props.events[0]?.target === this.props.player_id ||
-      !this.props.allPlayers[0]["my-turn"] ||
-      this.props.allPlayers[0]["my-turn"] === "azkaban"
-    )
+    // Dead can’t be attacked
+    if (this.props.player.character.health === 0) return false;
+
+    // If it’s a ranged card, then check the range
+    if (this.props.targets.includes("range") && !this.checkDistance(1))
       return false;
-    if (this.tableauClickable()) return true;
+
+    if (this.props.targets.includes("wand-range") && !this.checkDistance())
+      return false;
     if (
-      this.props.reaction.targets.indexOf("others") !== -1 &&
-      this.props.pindex !== 0 &&
-      this.checkDistance()
-    ) {
+      this.props.player.id === this.props.player_id &&
+      this.props.targets.includes("my-character")
+    )
       return true;
-    }
+    if (
+      this.props.player.id !== this.props.player_id &&
+      this.props.targets.includes("characters")
+    )
+      return true;
+
     return false;
+  };
+
+  apparate = (index) => {
+    let clickable = false;
+    if (this.props.targets.includes("between-characters")) clickable = true;
+    if (clickable && (index === 0 || index === this.props.players.length - 1))
+      clickable = false;
+    return clickable;
   };
 
   render() {
@@ -110,23 +173,36 @@ class Player extends Component {
         <h1 className="name-card">{this.props.player.name}</h1>
 
         <Character
-          reaction={this.props.reaction}
-          player={this.props.player}
           character={this.props.player.character}
-          extraClass={this.characterClickable() ? "clickable " : ""}
+          extraClass={
+            (this.characterClickable() ? "clickable " : "") +
+            (this.props.that.turnCycle.felix &&
+            this.props.that.turnCycle.felix.some((player) => {
+              if (this.props.that.turn !== this.props.that.player_id)
+                return false;
+              return player.id === this.props.player.id;
+            })
+              ? "selected "
+              : "")
+          }
           playCard={
-            this.tableauClickable()
-              ? this.props.tableauPlay
-              : this.characterClickable()
-              ? this.props.characterPlay
+            this.characterClickable()
+              ? this.props.targets.includes("my-tableau-empty") ||
+                this.props.targets.includes("tableau-empty")
+                ? () => {
+                    this.props.tableauClick(emptyCard, this.props.player);
+                  }
+                : () => {
+                    this.props.characterClick(this.props.player);
+                  }
               : () => {}
           }
         />
         <div
-          onClick={() => {
-            this.tableauClickable() &&
-              this.props.tableauPlay(this.props.player);
-          }}
+          // onClick={() => {
+          //   this.tableauClickable() &&
+          //     this.props.tableauPlay(this.props.player);
+          // }}
           className="tableau"
         >
           {tableau.map((card, i) => (
@@ -134,35 +210,78 @@ class Player extends Component {
               key={i}
               index={i}
               extraClass={
-                (this.handClickable(card) ? "clickable " : "") +
-                (this.props.reaction.card?.id === card.id ? "selected " : "")
+                (this.tableauClickable(card) ? "clickable " : "") +
+                (this.props.that.turnCycle.cards.some((currentCard) => {
+                  return currentCard.id === card.id;
+                })
+                  ? "selected "
+                  : "")
               }
               player={this.props.player}
               card={card}
               playCard={
-                this.tableauClickable() || this.handClickable(card)
-                  ? this.props.playCard
+                this.tableauClickable(card)
+                  ? () => {
+                      this.props.tableauClick(card, this.props.player);
+                    }
                   : () => {}
               }
             />
           ))}
         </div>
-        <div className={"hand"}>
+        <div
+          className={"hand" + (this.props.that.showCards ? "" : " collapsed")}
+        >
           {this.props.player.hand.map((card, i) => (
             <Card
+              myCard={this.props.player.id === this.props.player_id}
               key={i}
               index={i}
               extraClass={
                 (this.handClickable(card) ? "clickable " : "") +
-                (this.props.reaction.card?.id === card.id ? "selected " : "")
+                (this.props.that.turnCycle.cards.some((currentCard) => {
+                  return currentCard.id === card.id;
+                })
+                  ? "selected "
+                  : "") +
+                (this.props.that.turnCycle[
+                  "id" + this.props.player.id
+                ]?.cards.some((currentCard) => {
+                  return currentCard.id === card.id;
+                })
+                  ? "selected "
+                  : "")
               }
-              player={this.props.player}
               card={card}
               playCard={
-                this.handClickable(card) ? this.props.playCard : () => {}
+                this.handClickable(card)
+                  ? () => {
+                      this.props.handClick(card, this.props.player);
+                    }
+                  : () => {}
               }
             />
           ))}
+        </div>
+        <div
+          className={
+            "between-characters" +
+            (this.apparate(this.props.index) ? " hasclickable" : "")
+          }
+        >
+          <div
+            className={
+              "inner-after" +
+              (this.apparate(this.props.index) ? " clickable" : "")
+            }
+            onClick={
+              this.apparate(this.props.index)
+                ? () => {
+                    this.props.apparate(this.props.index);
+                  }
+                : () => {}
+            }
+          ></div>
         </div>
       </div>
     );

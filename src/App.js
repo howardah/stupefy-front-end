@@ -1,10 +1,17 @@
 import React, { Component } from "react";
-import { BrowserRouter as Router, Switch, Route } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Switch,
+  Route,
+  Redirect,
+} from "react-router-dom";
 import "./App.css";
-import * as setup from "./javascripts/card-setup";
-import { Deck } from "./javascripts/deck";
 import Board from "./components/board";
+import CreateJoin from "./components/create-join/create-join.jsx";
+import Room from "./components/create-join/room";
 import queryString from "query-string";
+import { render } from "@testing-library/react";
+import { camelCase } from "lodash";
 // import socketIOClient from "socket.io-client";
 // const ENDPOINT = "http://127.0.0.1:4001";
 
@@ -20,34 +27,41 @@ import queryString from "query-string";
 
 class Stupefy extends Component {
   getQueryObj = () => {
-    return queryString.parse(this.props.location.search.toLowerCase());
+    return queryString.parse(this.props.location.search);
   };
 
   state = {
-    setupDeck: new Deck(setup.initialDeck.cards, setup.initialDeck.discards),
-    setupPlayers: setup.players,
+    setupObj: {},
     q: this.getQueryObj(),
-    turn: 0,
-    events: [],
     isLoaded: false,
   };
 
   componentDidMount() {
+    const apiLocation =
+      (process.env.NODE_ENV !== "development"
+        ? ""
+        : window.location.origin.replace(window.location.port, "3000")) +
+      "/database/players/";
+
     fetch(
-      "http://127.0.0.1:4001/database/players/" +
-        this.props.location.search.toLowerCase()
+      apiLocation +
+        "?room=" +
+        camelCase(this.state.q.room) +
+        "&id=" +
+        +this.state.q.id
     )
       .then((res) => res.json())
       .then(
         (result) => {
-          console.log(result);
-          this.setState({
-            setupDeck: new Deck(result[0].deck.cards, result[0].deck.discards),
-            turn: result[0].turn,
-            events: result[0].events || [],
-            setupPlayers: result[0].players,
-            isLoaded: true,
-          });
+          if (result) {
+            console.log(result);
+            this.setState({
+              setupObj: result[0],
+              isLoaded: true,
+            });
+          } else {
+            this.setState({ isLoaded: "no-room" });
+          }
         },
         // Note: it's important to handle errors here
         // instead of a catch() block so that we don't swallow
@@ -62,11 +76,13 @@ class Stupefy extends Component {
   }
 
   render() {
-    const { error, isLoaded, items } = this.state;
+    const { error, isLoaded } = this.state;
     if (error) {
       return <div>Error: {error.message}</div>;
     } else if (!isLoaded) {
       return <div className="loading">Loading...</div>;
+    } else if (isLoaded === "no-room") {
+      return <div className="loading">This room doesn’t exist!</div>;
     } else {
       // if (typeof this.state.q.id === "string") {
       let q = Object.assign(this.state.q);
@@ -79,12 +95,7 @@ class Stupefy extends Component {
             <Board
               onRef={(ref) => (this.board = ref)}
               query={q}
-              players={this.state.setupPlayers}
-              deck={this.state.setupDeck}
-              turn={this.state.turn}
-              events={this.state.events}
-              stopTurn={this.nextTurn}
-              emitEvent={this.props.emitFunction}
+              setupObj={this.state.setupObj}
             />
           </div>
         </div>
@@ -94,9 +105,16 @@ class Stupefy extends Component {
 }
 
 function App() {
+  const renderRedirect = (location) => {
+    return <Redirect to={"/" + location} />;
+  };
+
   return (
     <Router>
-      <Route path="/" render={(props) => <Stupefy {...props} />} />
+      {window.location.pathname === "/" ? renderRedirect("welcome") : ""}
+      <Route path="/welcome/" render={(props) => <CreateJoin {...props} />} />
+      <Route path="/waiting-room/" render={(props) => <Room {...props} />} />
+      <Route path="/play/" render={(props) => <Stupefy {...props} />} />
     </Router>
   );
 }

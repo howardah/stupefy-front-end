@@ -2,362 +2,142 @@ import React, { Component, useRef } from "react";
 import Player from "./player";
 import CardDeck from "./card-deck";
 import { Deck } from "../javascripts/deck";
-import { CardRules, resolveEvent } from "./card-rules";
+import { CardRules } from "./card-rules";
+import { resolveEvent } from "./utils/resolve-event";
+import { protegoOptions } from "./utils/character-events";
+import { playCard } from "./card-rules/all-rules";
 import SideBar from "./sidebar";
 import Alert from "./alert";
 import Action from "./action";
 import Table from "./table";
 import socketIOClient from "socket.io-client";
-import { deck } from "../javascripts/card-setup";
-const ENDPOINT = "http://127.0.0.1:4001";
-const socket = socketIOClient(ENDPOINT);
+import { ef } from "../javascripts/event-functions";
+import cloneDeep from "lodash/cloneDeep";
+import {
+  titleCase,
+  cardsInclude,
+  cardIndex,
+  playerIndex,
+  popUp,
+  deathCheck,
+  resolutionEvent,
+  tableauProblems,
+} from "./utils/tools";
+import {
+  endTurn,
+  setupCycle,
+  cycleCleanse,
+  incrementTurn,
+  discard,
+  countAllCards,
+} from "./utils/turn-tools";
+import { getTargets, cardTargets } from "./utils/get-targets";
 
-const emptyReaction = {
-  instigator: false,
-  card: false,
-  targets: [],
-  effects: "",
-  location: "",
-};
+import { sortPlayers } from "./card-rules/spells/sort-players";
+import { initial } from "lodash";
+import ChooseCharacter from "./choose-character";
 
-const thisPlayeri = (oplayers, id) => {
-  return oplayers.findIndex((player) => {
-    return player.id === Number(id);
-  });
-};
-const initialPlayers = (oplayers, id, turn) => {
-  const players = [...oplayers];
-  const playerIndex = oplayers.findIndex((player) => {
-    return player.id === Number(id);
-  });
-
-  const beforePlayer = players.splice(0, playerIndex);
-
-  players[0]["my-turn"] = turn === id;
-
-  return [...players, ...beforePlayer];
-};
+const ENDPOINT =
+  process.env.NODE_ENV !== "development"
+    ? window.location.origin
+    : window.location.origin.replace(window.location.port, "3000");
+// const ENDPOINT = window.location.origin "http://127.0.0.1:4001";
+// const socket = socketIOClient(ENDPOINT);
 
 class Board extends Component {
   state = {
-    players: initialPlayers(
-      this.props.players,
-      this.props.query.id,
-      this.props.turn
+    players: sortPlayers(
+      this.props.setupObj.players,
+      this.props.setupObj.turnOrder
     ),
-    deck: this.props.deck,
-    reaction: emptyReaction,
+    deck: this.props.setupObj.deck,
+    // reaction: emptyReaction,
     actions: {
       message: "",
       options: [],
     },
-    events: this.props.events,
-    alerts: [
-      // "Welcome " +
-      //   this.props.players[thisPlayeri(this.props.players, this.state.player_id)]
-      //     .name +
-      //   "!",
-    ],
-    table: [],
-    turn: this.props.turn,
-    freeze: false,
+    events: this.props.setupObj.events || [],
+    alerts: [],
+    table: this.props.setupObj.table || [],
+    turn: this.props.setupObj.turn,
+    turnCycle: this.props.setupObj.turnCycle,
+    turnOrder: this.props.setupObj.turnOrder,
+    deadPlayers: this.props.setupObj.deadPlayers || [],
     player_id: this.props.query.id,
     player_room: this.props.query.room,
+    running: true,
+    showCards: true,
   };
 
-  nextTurn = () => {
-    let turn = this.state.turn;
-    turn++;
-    if (turn >= this.state.players.length) turn = 0;
+  componentDidMount = () => {
+    this.socket = socketIOClient(ENDPOINT);
+    // Join the socket for the room we’re in
+    this.socket.emit("join-room", this.state.player_room);
 
-    // this.setState({ turn });
-    this.emitEvent({ turn });
-  };
-
-  componentDidUpdate(pprops, pstate) {
-    if (pstate.turn !== this.state.turn) this.startTurn();
-  }
-
-  handleActionResponse = (action) => {
-    if (action === "" || this[action]()) {
-      this.setState({ actions: { message: "", options: [] } });
-      const events = [...this.state.events];
-      events.shift();
-      this.emitEvent(events);
-    }
-  };
-
-  takeHit = () => {
-    const players = [...this.state.players],
-      thisIndex = this.findMe(this.state.player_id);
-
-    players[thisIndex].character.health--;
-
-    // this.setState(players);
-    this.emitEvent({ players: players });
-    return true;
-  };
-
-  playProtego = () => {
-    if (
-      this.state.players[this.findMe(this.state.player_id)].hand.findIndex(
-        (card) => {
-          return card.name === "protego";
-        }
-      ) === -1
-    ) {
-      this.addAlert("Sorry, you don't have a Protego!");
-    } else {
-      console.log("protected!");
-      return true;
-    }
-  };
-
-  componentDidMount() {
-    // this.state.player_id = this.props.query.id;
-    // this.state.player_room = this.props.query.room;
-
-    socket.on("FromAPI", (data) => {
-      if (data.room === this.state.player_room) {
-        this.catchSocket(data);
-      }
+    // What to do when you get new info from the socket
+    this.socket.on("from-the-room", (data) => {
+      this.catchSocket(data);
     });
-    this.props.onRef(this);
-    console.log("only this once");
 
-    if (this.state.events.length > 0) {
-      if (this.state.events[0].target === this.state.player_id) {
-        if (this.state.events[[0]].popup) {
-          this.setState({ actions: this.state.events[0].popup });
-        }
-      }
-    }
-  }
-  componentWillUnmount() {
-    this.props.onRef(undefined);
-  }
+    this.socket.on("pause", (time) => {
+      console.log(Date.now() - time);
+      this.setState({
+        running: false,
+      });
+    });
 
-  handleCardPlay = (player, card) => {
-    let reaction;
-    //check if card is in hand or an tableau
-    const cardIndex = player.hand.indexOf(card);
+    this.socket.on("resume", (time) => {
+      console.log(Date.now() - time);
+      this.setState({
+        running: true,
+      });
+    });
 
-    //see if the target is the discard
-    let discard = cardIndex === -1;
-
-    if (!this.state.reaction || card?.id !== this.state.reaction?.card?.id) {
-      const rule = CardRules(card.name, player);
-
-      reaction = {
-        instigator: player,
-        card: Object.assign(card),
-        location: cardIndex === -1 ? "tableau" : "hand",
-        effects: rule.effect,
-        targets: discard ? ["discard"] : rule.targets,
-      };
-    } else {
-      reaction = emptyReaction;
-    }
-
-    this.setState({ reaction });
-  };
-
-  handleCharacterPlay = (player, character) => {
-    const players = [...this.state.players],
-      playerId = player.id;
-
-    //Most cards will require a response from the target
-    const cardReturn = this.state.reaction.effects(
-      playerId,
-      this.state.reaction.instigator
+    // Count to make sure we haven’t lost any cards
+    const count = countAllCards(this);
+    console.log(
+      "Card count is " +
+        count.length +
+        " with " +
+        count.duplicates +
+        " duplicates: [" +
+        count.catcher +
+        "]"
     );
 
-    const dObj = this.discardCard(
-      players,
-      this.state.reaction.instigator,
-      this.state.reaction.card
-    );
+    // Catch popups!
+    const popup = popUp(this.state, this);
+    if (popup) this.setState({ actions: popup });
 
-    this.emitEvent({
-      players: dObj.players,
-      deck: dObj.deck,
-      reaction: emptyReaction,
-      events: cardReturn.events,
+    if (this.state.turnCycle.phase === "unset")
+      this.setState({ turnCycle: setupCycle(this, this.state.turn) });
+  };
+
+  pauseRoom = () => {
+    this.socket.emit("pause-room", {
+      room: this.state.player_room,
+      time: Date.now(),
     });
   };
 
-  handleTableauPlay = (player, card) => {
-    console.log(player);
-    console.log(this.state.reaction.instigator);
-    const players = [...this.state.players],
-      instaIndex = players.indexOf(this.state.reaction.instigator),
-      cardIndex = players[instaIndex].hand.indexOf(this.state.reaction.card),
-      playerIndex = players.indexOf(player);
-    players[playerIndex].tableau.push(
-      players[instaIndex].hand.splice(cardIndex, 1)[0]
-    );
-
-    const dObj = this.state.reaction.effects(
-      players[instaIndex],
-      this.state.deck
-    ) || { player: players[instaIndex], deck: this.state.deck };
-
-    players[instaIndex].tableau = [...dObj["player"].tableau];
-
-    this.emitEvent({
-      players: players,
-      deck: dObj.deck,
-      reaction: emptyReaction,
+  resumeRoom = () => {
+    this.socket.emit("resume-room", {
+      room: this.state.player_room,
+      time: Date.now(),
     });
   };
 
-  discardCard = (players, player, card) => {
-    const index = players.indexOf(player),
-      cardIndex = players[index][this.state.reaction.location].indexOf(card);
+  catchSocket = (data) => {
+    const popup = popUp(data, this);
+    if (popup) data.actions = popup;
 
-    let deck = new Deck(this.state.deck.cards, this.state.deck.discards);
-
-    deck.serveCard(players[index].hand.splice(cardIndex, 1)[0]);
-    return { players, deck };
-  };
-
-  handleDraw = (pile) => {
-    const players = [...this.state.players],
-      discard = pile === "discard",
-      playerIndex = players.findIndex((player) => {
-        return player.id === Number(this.state.player_id);
-      }),
-      cardIndex = players[playerIndex][this.state.reaction.location]?.indexOf(
-        this.state.reaction.card
-      );
-
-    let deck = new Deck(this.state.deck.cards, this.state.deck.discards);
-
-    if (!this.state.reaction.card && discard && deck.discards.length === 0)
-      return;
-
-    if (this.state.reaction.card) {
-      deck.serveCard(
-        players[playerIndex][this.state.reaction.location].splice(
-          cardIndex,
-          1
-        )[0]
-      );
-      let reaction = emptyReaction;
-      this.emitEvent({ players, deck, reaction });
-    } else {
-      if (deck.cards.length > 0 || (discard && deck.discards.length > 0)) {
-        players[playerIndex].hand.unshift(deck.drawCards(1, discard)[0]);
-        players[playerIndex].character.draw--;
-        this.emitEvent({ players, deck });
-      } else if (!discard) {
-        deck.shuffle();
-        this.emitEvent({ deck });
-      }
-    }
-  };
-
-  findMe = (id) => {
-    const playerIndex = this.state.players.findIndex((player) => {
-      return player.id === Number(id);
-    });
-
-    return playerIndex;
-  };
-
-  turnOrder = () => {
-    const players = [...this.state.players];
-    const playerIndex = this.findMe(this.state.player_id);
-
-    console.log(this.state.player_id);
-    console.log(playerIndex);
-
-    const beforePlayer = players.splice(0, playerIndex);
-
-    return [...players, ...beforePlayer];
-  };
-
-  updateTurnOrder = () => {
-    const players = this.turnOrder();
-
-    this.setState({ players });
-  };
-
-  startTurn = () => {
-    const players = [...this.state.players],
-      currentIndex = this.findMe(this.state.turn);
-
-    players[currentIndex].character.draw = 2;
-    players[currentIndex].character.shots = 1;
-
-    players.forEach((v) => {
-      v["my-turn"] = this.state.turn === v.id;
-    });
-
-    //Check is player is in jail
-    if (players[currentIndex].tableau.some((e) => e.name === "azkaban"))
-      players[currentIndex]["my-turn"] = "azkaban";
-
-    console.log(players[currentIndex]["my-turn"]);
-
-    this.setState({ players });
-  };
-
-  azkabanEndTurn = () => {
-    const currentIndex = this.findMe(this.state.turn),
-      players = [...this.state.players],
-      player = players[currentIndex];
-
-    player["my-turn"] = false;
-
-    this.clearTable();
-
-    if (player.hand.length > player.character.health) {
-      this.addAlert(
-        "You must discard until you have at most the same number of cards as you do health"
-      );
-    } else {
-      this.endTurn();
-    }
-
-    this.setState({ players });
-    return true;
-  };
-
-  endTurn = () => {
-    const players = [...this.state.players],
-      currentIndex = this.findMe(this.state.turn),
-      player = players[currentIndex];
-
-    //If player ends their turn in Jail, they're now free!
-    if (player.tableau.some((e) => e.name === "azkaban")) {
-      const jailLocation = player.tableau.findIndex(
-          (e) => e.name === "azkaban"
-        ),
-        deck = new Deck(this.state.deck.cards, this.state.deck.discards);
-
-      deck.serveCard(player.tableau.splice(jailLocation, 1)[0]);
-      this.emitEvent({ players, deck });
-    }
-    this.clearTable();
-
-    if (player.hand.length > player.character.health) {
-      this.addAlert(
-        "You must discard until you have at most the same number of cards as you do health"
-      );
-    } else {
-      this.nextTurn();
-    }
+    console.log(data);
+    this.setState(data);
   };
 
   addAlert = (alert) => {
     const alerts = [...this.state.alerts, alert];
     this.setState({ alerts });
-  };
-
-  addAction = (action) => {
-    const actions = action;
-    this.setState({ actions });
   };
 
   deleteAlert = (i) => {
@@ -366,103 +146,545 @@ class Board extends Component {
     this.setState({ alerts });
   };
 
-  checkTopCard = (house) => {
-    const deck = new Deck(this.state.deck.cards, this.state.deck.discards),
-      houses = {
-        G: "Griffindor",
-        S: "Slytherine",
-        H: "Hufflepuff",
-        R: "Ravenclaw",
-      },
-      table = [...this.state.table];
+  emitEvent = (state) => {
+    this.socket.emit(
+      "stupefy",
+      Object.assign({ room: this.state.player_room }, state)
+    );
 
-    table.push(deck.drawCards(1)[0]);
+    const popup = popUp(state, this);
+    if (popup) state.actions = popup;
+    console.log(state);
 
-    let gotit = false,
-      checked = houses[table[table.length - 1].house];
-
-    house.forEach((h) => {
-      if (table[table.length - 1].house === h) {
-        gotit = true;
-        checked = houses[h];
-      }
-    });
-
-    this.emitEvent({ table, deck });
-    return { gotit: gotit, house: checked };
+    this.setState(state);
   };
 
-  checkAzkaban = () => {
+  nextTurn = () => {
+    const turnEnded = endTurn(this);
+    if (!turnEnded) return;
+
+    const turn = incrementTurn(
+      this.state.turn,
+      this.state.turnOrder,
+      this.state.deadPlayers
+    );
+
+    // Get the turnCycle ready for the next player
+    const setup = setupCycle(this, turn);
+
+    // Setup / reset the player’s character powers
+    const players = turnEnded.players || cloneDeep(this.state.players),
+      player = players[playerIndex(players, turn)];
+
+    player.power = [player.character.fileName];
+
+    this.emitEvent(Object.assign(turnEnded, { turn, players }, setup));
+  };
+
+  turnOrder = () => {
     const players = [...this.state.players],
-      thisPlayer = this.findMe(this.state.player_id),
-      topCard = this.checkTopCard([players[thisPlayer].character.house]);
+      playerIndex = this.state.turnOrder.indexOf(this.state.player_id);
 
-    if (topCard.gotit) {
-      players[thisPlayer]["my-turn"] = true;
-      this.setState({ players });
-      this.addAction({
-        message: "Hooray! You drew a " + topCard.house,
-        options: [{ label: "Take my turn", function: "clearTable" }],
-      });
-    } else {
-      this.addAction({
-        message: "Bummer, you drew a " + topCard.house,
-        options: [{ label: "End my turn", function: "azkabanEndTurn" }],
-      });
-    }
+    // Place this player at the start of the player array
+    // while maintaining the correct order
+    const beforePlayer = players.splice(0, playerIndex);
+    return [...players, ...beforePlayer];
   };
 
-  clearTable = () => {
-    const table = [...this.state.table],
-      deck = new Deck(this.state.deck.cards, this.state.deck.discards),
-      players = [...this.state.players];
+  handClick = (card, player) => {
+    // This function determines what to do when you
+    // click on a card in a hand given the state of the turn cycle.
+    const turnCycle = cloneDeep(this.state.turnCycle);
 
-    for (let i = 0; i < table.length; i++) {
-      deck.serveCard(table[i]);
+    if (turnCycle.phase === "initial") {
+      turnCycle.cards.push(card);
+      turnCycle.phase = "selected";
+      turnCycle.action = card.name;
+
+      // We’re finished here for now
+      this.emitEvent({ turnCycle });
+      return;
+    } else if (turnCycle.phase === "stuck-in-azkaban") {
+      turnCycle.cards.push(card);
+      turnCycle.phase = "selected-stuck-in-azkaban";
+      turnCycle.action = "discard";
+
+      // We’re finished here for now
+      this.emitEvent({ turnCycle });
+      return;
+    } else if (turnCycle.phase === "selected-stuck-in-azkaban") {
+      if (cardsInclude(turnCycle.cards, card)) {
+        turnCycle.cards.splice(cardIndex(turnCycle.cards, card), 1);
+      } else {
+        turnCycle.cards.push(card);
+      }
+
+      if (turnCycle.cards.length === 0) turnCycle.phase = "stuck-in-azkaban";
+
+      // We’re finished here for now
+      this.emitEvent({ turnCycle });
+      return;
+    } else if (turnCycle.phase === "selected") {
+      if (player.id === this.state.player_id) {
+        if (cardsInclude(turnCycle.cards, card)) {
+          turnCycle.cards.splice(cardIndex(turnCycle.cards, card), 1);
+        } else {
+          turnCycle.cards.push(card);
+          turnCycle.action = "discard";
+        }
+
+        // Check for the Felix Felicis scenario
+        if (
+          turnCycle.cards.length === 2 &&
+          turnCycle.cards.some((card) => card.name === "stupefy") &&
+          turnCycle.cards.some((card) => card.name === "felix_felicis")
+        ) {
+          turnCycle.action = "felix";
+        }
+        // Reset action to that of the one card
+        if (turnCycle.cards.length === 1) {
+          turnCycle.action = turnCycle.cards[0].name;
+        }
+        // Back to the beginning
+        if (turnCycle.cards.length === 0) {
+          cycleCleanse(turnCycle, this);
+        }
+
+        // We’re finished here for now
+        this.emitEvent({ turnCycle });
+        return;
+      } else {
+        const eventCreation = playCard[turnCycle.action].primary(
+          player,
+          card,
+          this,
+          turnCycle
+        );
+
+        if (!eventCreation) return;
+        turnCycle.phase = "attack";
+
+        if (eventCreation.resolve) {
+          cycleCleanse(turnCycle, this);
+          this.emitEvent(Object.assign(eventCreation.state, { turnCycle }));
+          return;
+        }
+      }
+    } else if (turnCycle.phase === "attack") {
+      if (player.id === this.state.player_id) {
+        if (cardsInclude(turnCycle["id" + this.state.player_id].cards, card)) {
+          turnCycle["id" + this.state.player_id].cards.splice(
+            cardIndex(turnCycle["id" + this.state.player_id].cards, card),
+            1
+          );
+        } else {
+          turnCycle["id" + this.state.player_id].cards.push(card);
+        }
+
+        // We’re finished here for now
+        this.emitEvent({ turnCycle });
+        return;
+      }
     }
-
-    if (players[this.findMe(this.state.player_id)]["my-turn"] === "azkaban") {
-      players[this.findMe(this.state.player_id)]["my-turn"] = true;
-    }
-
-    this.emitEvent({ table: [], deck: deck, players: players });
-    return true;
   };
+  tableauClick = (card, player) => {
+    // This function determines what to do when you
+    // click on a card in a hand given the state of the turn cycle.
+    const turnCycle = cloneDeep(this.state.turnCycle);
 
-  catchSocket = (data) => {
-    console.log(data);
-    if (data.events && data.events.length > 0) {
-      if (data.events[0].target === this.state.player_id) {
-        if (data.events[0].popup) {
-          this.setState({ actions: data.events[[0]].popup });
+    if (turnCycle.phase === "initial") {
+      turnCycle.cards.push(card);
+      turnCycle.phase = "selected-tableau";
+      turnCycle.action = "discard";
+
+      // Check if the selected card is the ressurection stone
+      if (
+        card.name === "resurrection_stone" &&
+        // You can only use the stone once per turn
+        !turnCycle.used.includes("ressurection_stone")
+      ) {
+        turnCycle.phase = "ressurection_stone";
+        turnCycle.action = "ressurection_stone";
+      }
+
+      this.emitEvent({ turnCycle });
+      return;
+    } else if (
+      turnCycle.phase === "selected-tableau" ||
+      turnCycle.phase === "ressurection_stone"
+    ) {
+      if (player.id === this.state.player_id) {
+        if (cardsInclude(turnCycle.cards, card)) {
+          turnCycle.cards.splice(cardIndex(turnCycle.cards, card), 1);
+        } else {
+          turnCycle.cards.push(card);
+          turnCycle.phase = "selected-tableau";
+        }
+
+        if (
+          turnCycle.cards.length === 1 &&
+          // Check if the selected card is the ressurection stone
+          turnCycle.cards[0].name === "resurrection_stone" &&
+          // You can only use the stone once per turn
+          !turnCycle.used.includes("ressurection_stone")
+        ) {
+          turnCycle.phase = "ressurection_stone";
+          turnCycle.action = "ressurection_stone";
+        }
+
+        if (turnCycle.cards.length === 0) cycleCleanse(turnCycle, this);
+      }
+
+      this.emitEvent({ turnCycle });
+      return;
+    }
+
+    if (turnCycle.phase === "selected") {
+      if (
+        cardTargets(turnCycle.action, turnCycle).includes("my-tableau-empty") ||
+        cardTargets(turnCycle.action, turnCycle).includes("tableau-empty")
+      ) {
+        const players = cloneDeep(this.state.players),
+          tableauPlayer = players[playerIndex(players, player.id)],
+          handPlayer = players[playerIndex(players, this.state.player_id)];
+
+        tableauPlayer.tableau.push(
+          handPlayer.hand.splice(
+            cardIndex(handPlayer.hand, turnCycle.cards[0]),
+            1
+          )[0]
+        );
+
+        if (turnCycle.cards[0].name === "fiendfyre") {
+          const fiendfyre = playCard.fiendfyre.primary(player, this, turnCycle);
+
+          if (!fiendfyre) return;
+
+          this.emitEvent(Object.assign(fiendfyre.state, { turnCycle }));
+          // We’re done here for now
+          return;
+        }
+
+        cycleCleanse(turnCycle, this);
+        const tp = tableauProblems(tableauPlayer.tableau);
+
+        if (tp) {
+          this.addAlert(tp);
+          return;
+        }
+
+        this.emitEvent({ turnCycle, players });
+        return;
+      } else {
+        const eventCreation = playCard[turnCycle.action].primary(
+          player,
+          card,
+          this,
+          turnCycle
+        );
+
+        if (!eventCreation) return;
+        turnCycle.phase = "attack";
+
+        if (eventCreation.resolve) {
+          cycleCleanse(turnCycle, this);
+          this.emitEvent(Object.assign(eventCreation.state, { turnCycle }));
+          return;
         }
       }
     }
+  };
+  characterClick = (player) => {
+    // This function determines what to do when you
+    // click on a card in a hand given the state of the turn cycle.
+    const turnCycle = cloneDeep(this.state.turnCycle);
 
-    this.setState(data);
+    if (turnCycle.phase === "selected" || turnCycle.phase === "felix") {
+      const eventCreation = playCard[turnCycle.action].primary(
+        player,
+        this,
+        turnCycle
+      );
+
+      console.log(turnCycle);
+      if (!eventCreation) return;
+      if (turnCycle.phase === "selected") turnCycle.phase = "attack";
+      turnCycle.hotseat = player.id;
+
+      if (eventCreation.resolve) {
+        cycleCleanse(turnCycle, this);
+        this.emitEvent(Object.assign(eventCreation.state, { turnCycle }));
+        return;
+      } else {
+        this.emitEvent(Object.assign(eventCreation.state, { turnCycle }));
+      }
+    }
+  };
+  tableClick = (card) => {
+    // This function determines what to do when you
+    // click on a card in a hand given the state of the turn cycle.
+    const turnCycle = cloneDeep(this.state.turnCycle);
+    var eventCreation = false;
+
+    if (turnCycle.phase === "selected") {
+      eventCreation = playCard[turnCycle.action].primary(card, this, turnCycle);
+    } else if (turnCycle.phase === "ressurection_stone") {
+      // Lay out all of the cards for the
+      eventCreation = playCard[turnCycle.action].primary(card, this, turnCycle);
+
+      this.setState(eventCreation);
+      console.log(eventCreation);
+
+      return;
+    } else {
+      eventCreation = playCard[turnCycle.action].secondary(
+        card,
+        this,
+        turnCycle
+      );
+    }
+
+    if (!eventCreation) return;
+
+    if (!eventCreation.resolve) {
+      this.emitEvent(Object.assign(eventCreation.state, { turnCycle }));
+    } else {
+      cycleCleanse(turnCycle, this);
+      this.emitEvent(Object.assign(eventCreation.state, { turnCycle }));
+    }
+  };
+  deckClick = (drawPile) => {
+    // This function determines what to do when you click
+    // on the draw or discard pile.
+    const turnCycle = cloneDeep(this.state.turnCycle);
+    const players = cloneDeep(this.state.players),
+      deck = new Deck(
+        [...this.state.deck.cards],
+        [...this.state.deck.discards]
+      );
+
+    // Draw pile first
+    if (drawPile === "draw") {
+      if (turnCycle.phase === "initial") {
+        // If it's the beginning of the cycle then they
+        // will be drawing cards
+        players[playerIndex(players, this.state.player_id)].hand.unshift(
+          deck.drawCard()
+        );
+
+        turnCycle.draw--;
+        this.emitEvent({ turnCycle, deck, players });
+        return;
+      }
+
+      // Special event. Azkaban escape:
+      if (turnCycle.phase === "azkaban") {
+        // Try to draw to see if you get to take a turn.
+        const eventCreation = playCard.azkaban(this, turnCycle);
+
+        if (!eventCreation) return;
+
+        // If they didn’t succeed in escaping
+        if (!eventCreation.gotit) {
+          turnCycle.phase = "stuck-in-azkaban";
+          // Give them a few seconds to clock that it’s
+          // not their turn anymore
+          setTimeout(() => {
+            this.nextTurn();
+          }, 5000);
+        } else {
+          // If they escape, start their turn!
+          cycleCleanse(turnCycle, this);
+        }
+
+        // Submit the changes!
+        this.emitEvent(Object.assign(eventCreation.state, { turnCycle }));
+        return;
+      }
+    }
+
+    if (drawPile === "discard") {
+      const discardEvent = playCard.discardEvent.primary(this, turnCycle);
+
+      if (!discardEvent) return;
+
+      this.emitEvent(discardEvent.state);
+    }
+  };
+  apparate = (index) => {
+    const afterPlayer = cloneDeep(this.turnOrder()),
+      turnOrder = [],
+      deck = new Deck(
+        [...this.state.deck.cards],
+        [...this.state.deck.discards]
+      );
+
+    const turnCycle = cloneDeep(this.state.turnCycle);
+
+    // Reorder the players
+    const thisPlayer = afterPlayer.splice(0, 1),
+      beforePlayer = afterPlayer.splice(0, index),
+      players = [...beforePlayer, ...thisPlayer, ...afterPlayer];
+
+    players.forEach((player) => turnOrder.push(player.id));
+
+    const player = players[playerIndex(players, this.state.player_id)];
+
+    // Discard the apparate card
+    discard(player, deck, turnCycle.cards);
+    cycleCleanse(turnCycle, this);
+
+    const location =
+        " apparated between " +
+        beforePlayer[beforePlayer.length - 1].character.shortName +
+        " and " +
+        afterPlayer[0].character.shortName +
+        ".",
+      events = [
+        resolutionEvent(
+          "You have" + location,
+          [player.id],
+          player.character.shortName + location
+        ),
+      ];
+
+    this.emitEvent({ players, turnOrder, turnCycle, deck, events });
   };
 
-  emitEvent = (state) => {
-    this.setState(state);
-    socket.emit(
-      "player change",
-      Object.assign({ room: this.state.player_room }, state)
-    );
+  actionClick = (action, index) => {
+    this.pauseRoom();
+    const turnCycle = cloneDeep(this.state.turnCycle);
+
+    turnCycle["id" + this.state.player_id].choice = action;
+    const result = playCard[turnCycle.action][action](this, index, turnCycle);
+
+    if (!result) return;
+
+    let workingState = {};
+
+    if (result.resolve) {
+      const events = result.state.events
+        ? result.state.events
+        : cloneDeep(this.state.events);
+
+      if (events[0].target.length > 1) {
+        const event = events[0];
+        event.target.splice(event.target.indexOf(this.state.player_id), 1);
+        workingState.events = events;
+      } else {
+        const resolution = playCard[turnCycle.action].resolution(this, action);
+
+        events.shift();
+
+        if (resolution.event) {
+          events.unshift(resolution.event);
+        }
+
+        turnCycle.phase = "initial";
+        workingState.events = events;
+      }
+    }
+
+    if (result.state.players) {
+      const newlyDead = deathCheck(
+        result.state.players,
+        this.state.deadPlayers
+      );
+      if (newlyDead.length > 0) {
+        const deathObj = playCard.death.primary(
+          this,
+          Object.assign(result.state, workingState),
+          turnCycle
+        );
+
+        workingState = Object.assign(workingState, deathObj);
+
+        console.log(deathObj);
+        // this.addAlert(
+        //   "THIS PLAYER DIES WHEN YOU DO THAT. SETUP THE DEATH FUNCTION."
+        // );
+        // return;
+      }
+    }
+
+    // If it's still on the initial phase,
+    // then go ahead and reset it
+    if (turnCycle.phase === "initial") cycleCleanse(turnCycle, this);
+    // Submit all changes
+    const state = Object.assign(result.state, workingState);
+    this.emitEvent(Object.assign(state, { turnCycle }));
+
+    this.resumeRoom();
+  };
+
+  chooseCharacter = (character) => {
+    const players = cloneDeep(this.state.players),
+      thisPlayer = players[playerIndex(players, this.state.player_id)],
+      deck = new Deck(
+        [...this.state.deck.cards],
+        [...this.state.deck.discards]
+      ),
+      turnCycle = cloneDeep(this.state.turnCycle);
+
+    // Change the character array to the selected character
+    thisPlayer.character = character;
+
+    // If it’s the minister, give them an extra health
+    if (thisPlayer.role === "minister") {
+      thisPlayer.character.health++;
+      thisPlayer.character.maxHealth++;
+    }
+
+    thisPlayer.power.push(thisPlayer.character.fileName);
+
+    // Deal out cards equal to the life points
+    thisPlayer.hand = deck.drawCards(thisPlayer.character.health);
+
+    // If it's the last one, start the game!
+    if (!players.some((p) => Array.isArray(p.character)))
+      turnCycle.phase = "initial";
+
+    this.emitEvent({ players, deck, turnCycle });
+  };
+
+  clearResolution = () => {
+    const events = cloneDeep(this.state.events);
+    events.shift();
+
+    const actions = popUp({ events }, this);
+    this.setState({ events, actions });
+  };
+
+  toggleCards = () => {
+    let showCards = !this.state.showCards;
+    this.setState({ showCards });
   };
 
   render() {
-    // this.props.emitEvent(this.state.player_id);
-    // if (this.findMe(this.state.player_id) !== 0) this.updateTurnOrder();
-    // console.log("every change?");
-    const orderedPlayers = this.turnOrder();
-    console.log(orderedPlayers);
+    const orderedPlayers = this.turnOrder(),
+      targets = this.state.running ? getTargets(this) : [];
+
     return (
       <React.Fragment>
+        {Array.isArray(orderedPlayers[0].character) ? (
+          <ChooseCharacter
+            chooseCharacter={this.chooseCharacter}
+            player={orderedPlayers[0]}
+          />
+        ) : (
+          ""
+        )}
         <div className="alert-holder">
-          {this.state.actions.options.length > 0 ? (
+          {this.state.actions.message !== "" ? (
             <Action
+              that={this.state}
+              running={this.state.running}
+              Alert={this.addAlert}
+              player_id={this.state.player_id}
+              players={orderedPlayers}
               actions={this.state.actions}
-              acFunction={this.handleActionResponse}
+              acFunction={this.actionClick}
+              deleteMe={this.clearResolution}
             />
           ) : (
             ""
@@ -478,41 +700,42 @@ class Board extends Component {
         </div>
         <div className="col-md-8">
           <CardDeck
-            player_id={this.state.player_id}
-            events={this.state.events}
-            reaction={this.state.reaction}
-            drawCard={this.handleDraw}
-            checkTopCard={this.checkTopCard}
-            azkaban={this.checkAzkaban}
+            that={this.state}
+            targets={targets}
+            deckClick={this.deckClick}
             deck={this.state.deck}
-            players={orderedPlayers}
           ></CardDeck>
           <Table
-            reaction={this.state.reaction}
-            players={orderedPlayers}
+            that={this.state}
+            targets={targets}
+            tableClick={this.tableClick}
             table={this.state.table}
           />
           {orderedPlayers.map((player, i) => (
             <Player
+              that={this.state}
+              targets={targets}
               player_id={this.state.player_id}
-              events={this.state.events}
-              reaction={this.state.reaction}
               key={i}
-              pindex={i}
-              characterPlay={this.handleCharacterPlay}
-              tableauPlay={this.handleTableauPlay}
-              playCard={this.handleCardPlay}
+              index={i}
               player={player}
-              allPlayers={orderedPlayers}
+              players={orderedPlayers}
+              handClick={this.handClick}
+              tableauClick={this.tableauClick}
+              characterClick={this.characterClick}
+              apparate={this.apparate}
             ></Player>
           ))}
         </div>
         <SideBar
-          endTurn={this.endTurn}
+          that={this.state}
+          player_id={this.state.player_id}
+          endTurn={this.nextTurn}
           boardDeets={this.board}
           query={this.props.query}
           players={orderedPlayers}
           turn={this.state.turn}
+          toggleCards={this.toggleCards}
         />
       </React.Fragment>
     );
